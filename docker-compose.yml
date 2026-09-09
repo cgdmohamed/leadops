@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=leadops
+      - POSTGRES_USER=leadops
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leadops -d leadops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Coolify magic URL: routes the app domain to container port 3000
+      - SERVICE_URL_APP_3000
+      # Coolify magic URL: public origin, e.g. http://app-<uuid>.yourdomain.com
+      - APP_URL=$SERVICE_URL_APP
+      - DATABASE_URL=postgresql://leadops:${SERVICE_PASSWORD_POSTGRES}@db:5432/leadops
+      - SESSION_SECRET=${SERVICE_HEX_64_APP}
+      - ALLOW_SIGNUP=${ALLOW_SIGNUP:-false}
+      - SMTP_URL=${SMTP_URL:-}
+      - MAIL_FROM=${MAIL_FROM:-LeadOps <no-reply@leadops.local>}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_DEVELOPER_TOKEN=${GOOGLE_DEVELOPER_TOKEN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  pgdata:
