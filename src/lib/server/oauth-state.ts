@@ -1,31 +1,33 @@
 import 'server-only';
 import { cookies } from 'next/headers';
 import { tokenHash, newToken } from './password';
+import type { Platform } from '@/lib/types';
 
-const GOOGLE_OAUTH_STATE_COOKIE = 'leadops_google_oauth_state';
+const OAUTH_STATE_COOKIE_PREFIX = 'leadops_oauth_state_';
 
 export function safeRedirect(value: string | null | undefined): string {
   if (value && value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) return value;
   return '/data-sync';
 }
 
-export async function createGoogleOAuthState(nextUrl: string) {
+export async function createOAuthState(platform: Platform, nextUrl: string) {
   const state = newToken();
   const payload = JSON.stringify({ stateHash: tokenHash(state), nextUrl: safeRedirect(nextUrl) });
-  (await cookies()).set(GOOGLE_OAUTH_STATE_COOKIE, payload, {
+  (await cookies()).set(`${OAUTH_STATE_COOKIE_PREFIX}${platform}`, payload, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    path: '/api/integrations/google',
+    path: `/api/integrations/${platform}`,
     maxAge: 600,
   });
   return state;
 }
 
-export async function consumeGoogleOAuthState(state: string | null) {
+export async function consumeOAuthState(platform: Platform, state: string | null) {
   const jar = await cookies();
-  const stored = jar.get(GOOGLE_OAUTH_STATE_COOKIE)?.value;
-  jar.delete(GOOGLE_OAUTH_STATE_COOKIE);
+  const cookieName = `${OAUTH_STATE_COOKIE_PREFIX}${platform}`;
+  const stored = jar.get(cookieName)?.value;
+  jar.delete(cookieName);
   if (!state || !stored) return null;
 
   try {
