@@ -65,18 +65,3 @@ export class GoogleAdsClient implements PlatformClient {
     return [];
   }
 }
-
-export async function getGoogleAuthUrl(state: string): Promise<string> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId) throw new Error('Google integration is not configured');
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: new URL('/api/integrations/google/callback', process.env.APP_URL ?? '').toString(),
-    response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/adwords',
-    access_type: 'offline',
-    prompt: 'consent',
-    state,
-  });
-  return `${GOOGLE_OAUTH}/auth?${params}`;
-}
