@@ -70,22 +70,22 @@ export default function PipelineAnalyticsPage() {
   const { items: leadRecords } = useRecords<Record<string, unknown>>("leads");
   const { items: oppRecords } = useRecords<Record<string, unknown>>("opportunities");
 
-  const demoLeads = useMemo<Lead[]>(() => leadRecords.map((r) => toLead(r)), [leadRecords]);
-  const demoOpportunities = useMemo<Opportunity[]>(() => oppRecords.map((r) => toOpportunity(r)), [oppRecords]);
+  const leads = useMemo<Lead[]>(() => leadRecords.map((r) => toLead(r)), [leadRecords]);
+  const opportunities = useMemo<Opportunity[]>(() => oppRecords.map((r) => toOpportunity(r)), [oppRecords]);
 
   const leadsByStatus = useMemo(() => {
     const grouped: Record<LeadStatus, Lead[]> = { new: [], contacted: [], qualified: [] };
-    demoLeads.forEach((lead) => { grouped[lead.status].push(lead); });
+    leads.forEach((lead) => { grouped[lead.status].push(lead); });
     return grouped;
-  }, [demoLeads]);
+  }, [leads]);
 
   const opportunitiesByStage = useMemo(() => {
     const grouped: Record<OpportunityStage, Opportunity[]> = {
       prospecting: [], discovery: [], proposal: [], negotiation: [], closed_won: [], closed_lost: [],
     };
-    demoOpportunities.forEach((opp) => { grouped[opp.stage].push(opp); });
+    opportunities.forEach((opp) => { grouped[opp.stage].push(opp); });
     return grouped;
-  }, [demoOpportunities]);
+  }, [opportunities]);
 
   const stageValues = useMemo(() => {
     const values: Record<string, number> = {};
@@ -98,7 +98,7 @@ export default function PipelineAnalyticsPage() {
     return values;
   }, [leadsByStatus, opportunitiesByStage]);
 
-  const totalLeads = demoLeads.length;
+  const totalLeads = leads.length;
   const wonCount = opportunitiesByStage.closed_won.length;
   const wonValue = stageValues.closed_won || 0;
   const pipelineValue = (stageValues.new || 0) + (stageValues.contacted || 0) + (stageValues.qualified || 0);
@@ -112,7 +112,7 @@ export default function PipelineAnalyticsPage() {
     const nextStage = stages[i + 1];
     const fromCount = leadsByStatus[stage.status].length;
     const toCount = leadsByStatus[nextStage.status].length;
-    const totalInAndAfter = demoLeads.filter((l) => {
+    const totalInAndAfter = leads.filter((l) => {
       return statusOrder.indexOf(l.status) >= statusOrder.indexOf(stage.status);
     }).length;
     const rate = totalInAndAfter > 0 ? Math.round((toCount / totalInAndAfter) * 100) : 0;
