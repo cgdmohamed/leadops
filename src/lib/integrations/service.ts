@@ -1,7 +1,7 @@
 import 'server-only';
 import { db, transaction } from '@/lib/server/db';
 import { getClient } from '@/lib/integrations';
-import type { Platform } from '@/lib/types';
+import { decryptJson, encryptJson, isEncryptedJson } from '@/lib/server/secret-json';
 
 export async function syncPlatform(workspaceId: string, platform: string): Promise<{ campaigns: number; leads: number }> {
   const connection = await db().query('SELECT * FROM platform_connections WHERE workspace_id=$1 AND platform=$2 AND status=$3', [workspaceId, platform, 'connected']);
@@ -11,7 +11,14 @@ export async function syncPlatform(workspaceId: string, platform: string): Promi
 
   const runId = (await db().query("INSERT INTO sync_runs(workspace_id,platform,status) VALUES($1,$2,'running') RETURNING id", [workspaceId, platform])).rows[0].id;
   try {
-    const credentials = connection.rows[0].credentials as Record<string, unknown>;
+    const credentials = decryptJson(connection.rows[0].credentials);
+    if (!isEncryptedJson(connection.rows[0].credentials)) {
+      await db().query('UPDATE platform_connections SET credentials=$3,updated_at=now() WHERE workspace_id=$1 AND platform=$2', [
+        workspaceId,
+        platform,
+        JSON.stringify(encryptJson(credentials)),
+      ]);
+    }
     const since = connection.rows[0].last_sync ?? undefined;
     const [campaigns, leads] = await Promise.all([
       client.fetchCampaigns(credentials),
