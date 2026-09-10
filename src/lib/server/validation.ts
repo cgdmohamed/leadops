@@ -11,7 +11,7 @@ export const schemas = {
   campaigns: z.object({ name: text, platform, status: z.enum(['active','paused','ended']), startDate: z.iso.date(), endDate: z.iso.date().optional() }),
   tasks: z.object({ name: text, leadId: uuid.optional(), dueDate: z.iso.date(), completed: z.boolean() }),
   notes: z.object({ leadId: uuid, content: z.string().trim().min(1).max(10000) }),
-  goals: z.object({ name: text, metric: z.enum(['leads','revenue','spend','wonDeals']), target: money, dueDate: z.iso.date() }),
+  goals: z.object({ name: text, metric: z.enum(['leads','qualified_leads','opportunities','deals','calls','revenue','collected_revenue','spend','cac','roas','wonDeals']), target: money, dueDate: z.iso.date(), assignedTo: z.string().max(200).optional(), current: z.number().finite().min(0).optional() }),
   'saved-views': z.object({ name: text, filters: z.object({ platform: platform.optional(), status: z.enum(['new','contacted','qualified']).optional(), ownerId: uuid.optional() }).strict() }),
   reports: z.object({ name: text, type: z.enum(['leads','campaigns','revenue']), startDate: z.iso.date(), endDate: z.iso.date() }),
   'assignment-rules': z.object({ name: text, enabled: z.boolean(), strategy: z.enum(['round-robin','load-balanced']), memberIds: z.array(uuid).min(1).max(100) }),
