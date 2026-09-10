@@ -28,6 +28,10 @@ services:
       - DATABASE_URL=postgresql://leadops:${SERVICE_PASSWORD_POSTGRES}@db:5432/leadops
       - SESSION_SECRET=${SERVICE_HEX_64_APP}
       - ALLOW_SIGNUP=${ALLOW_SIGNUP:-false}
+      - SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL:-sarah@leadops.io}
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-password123456}
+      - SEED_ADMIN_NAME=${SEED_ADMIN_NAME:-Sarah Chen}
+      - SEED_WORKSPACE_NAME=${SEED_WORKSPACE_NAME:-LeadOps HQ}
       - SMTP_URL=${SMTP_URL:-}
       - MAIL_FROM=${MAIL_FROM:-LeadOps <no-reply@leadops.local>}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
