@@ -61,7 +61,7 @@ export async function syncPlatform(workspaceId: string, platform: string): Promi
     return { campaigns: campaigns.length, leads: leads.length };
   } catch (error) {
     await db().query("UPDATE sync_runs SET status='failed',finished_at=now(),error=$2 WHERE id=$1", [runId, (error as Error).message]);
-    await db().query("UPDATE platform_connections SET status='error',last_error=$2,updated_at=now() WHERE workspace_id=$1 AND platform=$2", [workspaceId, (error as Error).message, platform]);
+    await db().query("UPDATE platform_connections SET status='error',last_error=$2,updated_at=now() WHERE workspace_id=$1 AND platform=$3", [workspaceId, (error as Error).message, platform]);
     throw error;
   }
 }
