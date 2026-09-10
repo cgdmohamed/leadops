@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { useRecords } from "@/lib/use-records";
 import { clientApi } from "@/lib/client-api";
-import type { Lead, LeadStatus, Platform } from "@/lib/types";
+import type { Lead, LeadStatus, Platform, TeamMember } from "@/lib/types";
 import { toast } from "sonner";
 import {
   Users,
@@ -54,7 +54,7 @@ function toLead(record: { id: string; data: Record<string, unknown>; ownerId: st
 }
 
 export default function LeadAssignmentPage() {
-  const { items: leadRecords } = useRecords<Record<string, unknown>>("leads");
+  const { items: leadRecords, update } = useRecords<Record<string, unknown>>("leads");
   const leads = useMemo<Lead[]>(() => leadRecords.map((r) => toLead(r)), [leadRecords]);
   const [rules, setRules] = useState(assignmentRules);
   const [roundRobinIndex, setRoundRobinIndex] = useState(0);
@@ -62,11 +62,11 @@ export default function LeadAssignmentPage() {
 
   useEffect(() => {
     let cancelled = false;
-    clientApi<{ members: { user: { id: string; name: string } }[] }>("/api/team")
+    clientApi<TeamMember[]>("/api/team")
       .then((data) => {
         if (cancelled) return;
         const map: Record<string, string> = {};
-        data.members.forEach((m) => { map[m.user.id] = m.user.name; });
+        data.forEach((m) => { map[m.id] = m.name; });
         setOwnerNames(map);
       })
       .catch(() => {});
@@ -92,10 +92,25 @@ export default function LeadAssignmentPage() {
     toast.success("Rule updated");
   };
 
-  const handleAutoAssign = () => {
-    toast.success(`Assigned ${unassignedLeads.length} leads using round robin`, {
-      description: "All unassigned leads have been distributed.",
-    });
+  const handleAutoAssign = async () => {
+    const memberIds = Object.keys(ownerNames);
+    if (!memberIds.length) {
+      toast.error("Add team members before assigning leads");
+      return;
+    }
+    try {
+      await Promise.all(
+        unassignedLeads.map((lead, index) =>
+          update(lead.id, {}, memberIds[(roundRobinIndex + index) % memberIds.length])
+        )
+      );
+      setRoundRobinIndex((roundRobinIndex + unassignedLeads.length) % memberIds.length);
+      toast.success(`Assigned ${unassignedLeads.length} leads using round robin`, {
+        description: "All unassigned leads have been distributed.",
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   return (
