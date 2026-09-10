@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PlatformBadge } from "@/components/platform-badge";
 import {
   Dialog,
@@ -86,7 +84,6 @@ export default function DataSyncPage() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [configurePlatform, setConfigurePlatform] = useState<Platform | null>(null);
   const [logsPlatform, setLogsPlatform] = useState<Platform | null>(null);
-  const [credForm, setCredForm] = useState<Record<string, string>>({});
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const connectedCount = connections.filter((connection) => connection.status === "connected").length;
@@ -146,32 +143,13 @@ export default function DataSyncPage() {
     }
   };
 
-  const handleGoogleConnect = async () => {
+  const handleAccountConnect = async (platform: Platform) => {
     setConnecting(true);
     try {
-      const { url } = await clientApi<{ url: string }>("/api/integrations/google/auth");
+      const { url } = await clientApi<{ url: string }>(`/api/integrations/${platform}/auth`);
       window.location.href = url;
     } catch (e) {
       toast.error((e as Error).message);
-      setConnecting(false);
-    }
-  };
-
-  const handleCredentialsConnect = async () => {
-    if (!configurePlatform) return;
-    setConnecting(true);
-    try {
-      await clientApi(`/api/integrations`, {
-        method: "POST",
-        body: JSON.stringify({ platform: configurePlatform, credentials: credForm }),
-      });
-      toast.success(`${configurePlatform} connected`);
-      setConfigurePlatform(null);
-      setCredForm({});
-      await load();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
       setConnecting(false);
     }
   };
@@ -439,7 +417,7 @@ export default function DataSyncPage() {
         </Card>
       </div>
 
-      <Dialog open={!!configurePlatform} onOpenChange={(o) => { if (!o) { setConfigurePlatform(null); setCredForm({}); } }}>
+      <Dialog open={!!configurePlatform} onOpenChange={(o) => { if (!o) setConfigurePlatform(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 capitalize">
@@ -467,51 +445,24 @@ export default function DataSyncPage() {
                     </Button>
                   </DialogFooter>
                 </>
-              ) : configurePlatform === "google" ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Connect your Google Ads account via OAuth. You will be redirected to Google to authorize access, then brought back automatically.
-                  </p>
-                  <DialogFooter>
-                    <Button onClick={handleGoogleConnect} disabled={connecting}>
-                      {connecting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-                      Connect with Google
-                    </Button>
-                  </DialogFooter>
-                </>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Enter API credentials for {configurePlatform}. Configure the App ID, Access Token and Account ID from your {configurePlatform} developer portal.
+                    Connect with your {configurePlatform} account. You will be redirected to authorize access, then brought back automatically.
                   </p>
-                  <div className="space-y-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="cred-token" className="text-xs">Access Token</Label>
-                      <Input id="cred-token" value={credForm.accessToken ?? ""} onChange={(e) => setCredForm((p) => ({ ...p, accessToken: e.target.value }))} placeholder="Paste access token" />
-                    </div>
-                    {configurePlatform === "meta" && (
-                      <div className="space-y-1">
-                        <Label htmlFor="cred-account" className="text-xs">Ad Account ID</Label>
-                        <Input id="cred-account" value={credForm.adAccountId ?? ""} onChange={(e) => setCredForm((p) => ({ ...p, adAccountId: e.target.value }))} placeholder="1234567890" />
-                      </div>
-                    )}
-                    {configurePlatform === "tiktok" && (
-                      <div className="space-y-1">
-                        <Label htmlFor="cred-advertiser" className="text-xs">Advertiser ID</Label>
-                        <Input id="cred-advertiser" value={credForm.advertiserId ?? ""} onChange={(e) => setCredForm((p) => ({ ...p, advertiserId: e.target.value }))} placeholder="1234567890123" />
-                      </div>
-                    )}
-                    {configurePlatform === "snapchat" && (
-                      <div className="space-y-1">
-                        <Label htmlFor="cred-org" className="text-xs">Organization ID</Label>
-                        <Input id="cred-org" value={credForm.organizationId ?? ""} onChange={(e) => setCredForm((p) => ({ ...p, organizationId: e.target.value }))} placeholder="org-uuid" />
-                      </div>
-                    )}
+                  <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+                    Make sure the OAuth app credentials for {configurePlatform} are configured in the production environment first.
+                    The callback URL is <span className="font-mono text-foreground">/api/integrations/{configurePlatform}/callback</span>.
                   </div>
+                  {configurePlatform !== "google" && (
+                    <p className="text-xs text-muted-foreground">
+                      After login, LeadOps will try to detect the first available ad account automatically.
+                    </p>
+                  )}
                   <DialogFooter>
-                    <Button onClick={handleCredentialsConnect} disabled={connecting} className="capitalize">
+                    <Button onClick={() => handleAccountConnect(configurePlatform)} disabled={connecting}>
                       {connecting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-                      Connect {configurePlatform}
+                      Connect with {configurePlatform}
                     </Button>
                   </DialogFooter>
                 </>
