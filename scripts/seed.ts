@@ -10,6 +10,16 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
+const SEED_ADMIN_EMAIL = (process.env.SEED_ADMIN_EMAIL ?? process.env.ADMIN_EMAIL ?? 'sarah@leadops.io').trim().toLowerCase();
+const SEED_ADMIN_NAME = (process.env.SEED_ADMIN_NAME ?? process.env.ADMIN_NAME ?? 'Sarah Chen').trim();
+const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? process.env.ADMIN_PASSWORD ?? 'password123456';
+const SEED_WORKSPACE_NAME = (process.env.SEED_WORKSPACE_NAME ?? 'LeadOps HQ').trim();
+
+if (!SEED_ADMIN_EMAIL || !SEED_ADMIN_NAME || SEED_ADMIN_PASSWORD.length < 12) {
+  console.error('Seed admin requires SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, and SEED_ADMIN_PASSWORD with at least 12 characters');
+  process.exit(1);
+}
+
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 async function hashPassword(password: string): Promise<string> {
@@ -39,19 +49,29 @@ async function seed() {
   try {
     await client.query('BEGIN');
 
-    const pw = await hashPassword('password123456');
+    const pw = await hashPassword(SEED_ADMIN_PASSWORD);
 
     // Users
-    const users = await Promise.all([
-      client.query('INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3) RETURNING id', ['sarah@leadops.io','Sarah Chen',pw]),
-      client.query('INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3) RETURNING id', ['james@leadops.io','James Rivera',pw]),
-      client.query('INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3) RETURNING id', ['mike@leadops.io','Mike Johnson',pw]),
+    const adminUser = await client.query(
+      `INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3)
+       ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name,password_hash=EXCLUDED.password_hash
+       RETURNING id`,
+      [SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, pw]
+    );
+    const agentUsers = await Promise.all([
+      client.query(`INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3)
+        ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name
+        RETURNING id`, ['james@leadops.io','James Rivera',pw]),
+      client.query(`INSERT INTO users(email,name,password_hash) VALUES($1,$2,$3)
+        ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name
+        RETURNING id`, ['mike@leadops.io','Mike Johnson',pw]),
     ]);
 
-    const [sarah, james, mike] = users.map(r => r.rows[0].id);
+    const sarah = adminUser.rows[0].id;
+    const [james, mike] = agentUsers.map(r => r.rows[0].id);
 
     // Workspaces
-    const ws1 = await client.query("INSERT INTO workspaces(name,currency,timezone) VALUES('LeadOps HQ','USD','America/New_York') RETURNING id");
+    const ws1 = await client.query("INSERT INTO workspaces(name,currency,timezone) VALUES($1,'USD','America/New_York') RETURNING id", [SEED_WORKSPACE_NAME]);
     const ws2 = await client.query("INSERT INTO workspaces(name,currency,timezone) VALUES('EU Branch','EUR','Europe/London') RETURNING id");
     const ws3 = await client.query("INSERT INTO workspaces(name,currency,timezone) VALUES('APAC','SGD','Asia/Singapore') RETURNING id");
     const [w1, w2, w3] = [ws1.rows[0].id, ws2.rows[0].id, ws3.rows[0].id];
@@ -62,7 +82,7 @@ async function seed() {
     await client.query('INSERT INTO memberships(workspace_id,user_id,role) VALUES($1,$2,\'admin\')',[w2,sarah]);
     await client.query('INSERT INTO memberships(workspace_id,user_id,role) VALUES($1,$2,\'agent\')',[w3,mike]);
 
-    // Set Sarah's session to ws-1
+    // Set active sessions for the seeded admin to the primary workspace.
     await client.query('UPDATE sessions SET workspace_id=$1 WHERE user_id=$2', [w1, sarah]);
 
     // Campaigns
@@ -197,7 +217,7 @@ async function seed() {
     await client.query('INSERT INTO audit_events(workspace_id,actor_id,action) VALUES($1,$2,\'seed.completed\')', [w1, sarah]);
 
     await client.query('COMMIT');
-    console.log('Seed completed: 3 users, 3 workspaces, 16 campaigns, 100 leads, 25 opportunities, goals, assignment rules');
+    console.log(`Seed completed: admin ${SEED_ADMIN_EMAIL}, 3 users, 3 workspaces, 16 campaigns, 100 leads, 25 opportunities, goals, assignment rules`);
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Seed failed:', error);
