@@ -117,8 +117,8 @@ const DEFAULT_VISIBLE: ColumnKey[] = ["Lead", "Stage", "Source", "Platform", "Ow
 
 export default function LeadsPage() {
   const router = useRouter();
-  const { items: leadRecords, loading, load, create, update, remove } = useRecords("leads");
-  const { items: noteRecords } = useRecords("notes");
+  const { items: leadRecords, loading, load, update, remove } = useRecords("leads");
+  const { items: noteRecords, create: createNote } = useRecords("notes");
   const leads = useMemo<Lead[]>(() => leadRecords.map((r) => toLead(r)), [leadRecords]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -295,7 +295,7 @@ export default function LeadsPage() {
   const handleAddNote = async () => {
     if (!detailLead || !noteText.trim()) return;
     try {
-      await create({ leadId: detailLead.id, content: noteText.trim(), createdAt: new Date().toISOString() }, detailLead.ownerId) as unknown as unknown;
+      await createNote({ leadId: detailLead.id, content: noteText.trim(), createdAt: new Date().toISOString() }, detailLead.ownerId) as unknown as unknown;
       setNoteText("");
       await load();
       toast.success("Note added");
