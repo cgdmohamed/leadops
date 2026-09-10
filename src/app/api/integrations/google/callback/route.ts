@@ -1,22 +1,21 @@
 import { db } from '@/lib/server/db';
 import { readSession } from '@/lib/server/session';
+import { consumeGoogleOAuthState } from '@/lib/server/oauth-state';
+import { encryptJson } from '@/lib/server/secret-json';
 
 const GOOGLE_OAUTH = 'https://oauth2.googleapis.com';
-
-function safeRedirect(state: string | null): string {
-  if (state && state.startsWith('/') && !state.startsWith('//') && !state.includes('\\')) return state;
-  return '/data-sync';
-}
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
+    const oauthState = await consumeGoogleOAuthState(state);
+    if (!oauthState) throw new Error('Invalid OAuth state');
 
     const user = await readSession();
     if (!user) return Response.redirect(new URL('/sign-in', process.env.APP_URL ?? request.url).toString());
-    if (user.role !== 'admin') return Response.redirect(new URL(safeRedirect(state), process.env.APP_URL ?? request.url).toString());
+    if (user.role !== 'admin') return Response.redirect(new URL(oauthState.nextUrl, process.env.APP_URL ?? request.url).toString());
 
     if (!code) throw new Error('Missing authorization code');
 
@@ -56,9 +55,9 @@ export async function GET(request: Request) {
     await db().query(`INSERT INTO platform_connections(workspace_id,platform,display_name,status,credentials,account_id)
       VALUES($1,'google','Google Ads','connected',$2,$3)
       ON CONFLICT (workspace_id,platform) DO UPDATE SET credentials=EXCLUDED.credentials,status='connected',account_id=EXCLUDED.account_id,last_error=NULL,updated_at=now()`,
-      [user.activeWorkspace, JSON.stringify({ refreshToken, customerId, accessToken: tokens.access_token }), customerId ?? null]);
+      [user.activeWorkspace, JSON.stringify(encryptJson({ refreshToken, customerId, accessToken: tokens.access_token })), customerId ?? null]);
 
-    return Response.redirect(new URL(`${safeRedirect(state)}?connected=google`, process.env.APP_URL ?? request.url).toString());
+    return Response.redirect(new URL(`${oauthState.nextUrl}?connected=google`, process.env.APP_URL ?? request.url).toString());
   } catch (error) {
     const message = (error as Error).message;
     const base = process.env.APP_URL ?? request.url;
