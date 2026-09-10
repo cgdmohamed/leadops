@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,24 +31,33 @@ import {
   Edit2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Platform } from "@/lib/types";
-
-const demoUser = { name: "Sarah Chen", email: "sarah@leadops.io", role: "admin" as const };
+import { clientApi } from "@/lib/client-api";
+import type { Platform, TeamMember, User as AppUser, Workspace } from "@/lib/types";
 
 interface PlatformConnection {
   platform: Platform;
   label: string;
-  connected: boolean;
+  status: "connected" | "disconnected" | "error";
   lastSync?: string;
-  accounts?: number;
+  accountId?: string | null;
 }
 
-const initialConnections: PlatformConnection[] = [
-  { platform: "meta", label: "Meta Ads", connected: true, lastSync: "2 minutes ago", accounts: 3 },
-  { platform: "google", label: "Google Ads", connected: true, lastSync: "5 minutes ago", accounts: 2 },
-  { platform: "tiktok", label: "TikTok Ads", connected: false },
-  { platform: "snapchat", label: "Snapchat Ads", connected: false },
-];
+interface AuditEntry {
+  id: string;
+  action: string;
+  entityId: string | null;
+  createdAt: string;
+  userName: string;
+}
+
+const platformLabels: Record<Platform, string> = {
+  meta: "Meta Ads",
+  google: "Google Ads",
+  tiktok: "TikTok Ads",
+  snapchat: "Snapchat Ads",
+};
+
+const platforms = Object.keys(platformLabels) as Platform[];
 
 const sections = [
   { id: "profile", label: "Profile", icon: User },
@@ -63,15 +73,64 @@ const sections = [
 ];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState("profile");
-  const [name, setName] = useState(demoUser.name);
-  const [email, setEmail] = useState(demoUser.email);
+  const [me, setMe] = useState<AppUser | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
-  const [connections, setConnections] = useState<PlatformConnection[]>(initialConnections);
+  const [connections, setConnections] = useState<PlatformConnection[]>(platforms.map((platform) => ({
+    platform,
+    label: platformLabels[platform],
+    status: "disconnected",
+  })));
   const [disconnectId, setDisconnectId] = useState<Platform | null>(null);
   const [twoFactor, setTwoFactor] = useState(false);
+  const roleCounts = useMemo(() => ({
+    admin: teamMembers.filter((member) => member.role === "admin").length,
+    agent: teamMembers.filter((member) => member.role === "agent").length,
+  }), [teamMembers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [user, workspaceData, integrationData, team, audit] = await Promise.all([
+          clientApi<AppUser>("/api/me"),
+          clientApi<Workspace>("/api/settings"),
+          clientApi<{ connections: Array<{ platform: Platform; status: PlatformConnection["status"]; account_id: string | null; last_sync: string | null }> }>("/api/integrations"),
+          clientApi<TeamMember[]>("/api/team"),
+          clientApi<AuditEntry[]>("/api/audit"),
+        ]);
+        if (cancelled) return;
+        setMe(user);
+        setName(user.name);
+        setEmail(user.email);
+        setWorkspace(workspaceData);
+        setTeamMembers(team);
+        setAuditEntries(audit);
+        setConnections(platforms.map((platform) => {
+          const found = integrationData.connections.find((connection) => connection.platform === platform);
+          return {
+            platform,
+            label: platformLabels[platform],
+            status: found?.status ?? "disconnected",
+            accountId: found?.account_id,
+            lastSync: found?.last_sync ?? undefined,
+          };
+        }));
+      } catch (error) {
+        if (!cancelled) toast.error((error as Error).message);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   const [pipelines, setPipelines] = useState([
     {
@@ -110,54 +169,78 @@ export default function SettingsPage() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSaving(false);
-    toast.success("Profile updated", { description: "Your profile has been saved." });
+    try {
+      const updated = await clientApi<AppUser>("/api/me", { method: "PATCH", body: JSON.stringify({ name, email }) });
+      setMe((prev) => prev ? { ...prev, ...updated } : prev);
+      toast.success("Profile updated");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      toast.error("Password too short", { description: "Must be at least 6 characters." });
+    if (newPassword.length < 12) {
+      toast.error("Password too short", { description: "Must be at least 12 characters." });
       return;
     }
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSaving(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    toast.success("Password changed", { description: "Your password has been updated." });
+    try {
+      await clientApi("/api/me", { method: "PATCH", body: JSON.stringify({ currentPassword, newPassword }) });
+      setCurrentPassword("");
+      setNewPassword("");
+      toast.success("Password changed");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleConnect = (platform: Platform) => {
-    setConnections((prev) =>
-      prev.map((c) =>
-        c.platform === platform
-          ? { ...c, connected: true, lastSync: "Just now", accounts: 1 }
-          : c
-      )
-    );
-    toast.success("Connected", { description: `${platform} account linked successfully.` });
+  const handleConnect = () => {
+    router.push("/data-sync");
   };
 
-  const handleDisconnect = (platform: Platform) => {
-    setConnections((prev) =>
-      prev.map((c) =>
-        c.platform === platform
-          ? { ...c, connected: false, lastSync: undefined, accounts: undefined }
-          : c
-      )
-    );
-    toast.success("Disconnected", { description: `${platform} account removed.` });
+  const handleDisconnect = async (platform: Platform) => {
+    try {
+      await clientApi("/api/integrations", { method: "DELETE", body: JSON.stringify({ platform }) });
+      setConnections((prev) => prev.map((c) => c.platform === platform ? { ...c, status: "disconnected", lastSync: undefined, accountId: null } : c));
+      toast.success("Disconnected");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
 
-  const handleSync = (platform: Platform) => {
-    setConnections((prev) =>
-      prev.map((c) =>
-        c.platform === platform ? { ...c, lastSync: "Just now" } : c
-      )
-    );
-    toast.success("Synced", { description: `${platform} data is up to date.` });
+  const handleSync = async (platform: Platform) => {
+    try {
+      await clientApi("/api/integrations", { method: "POST", body: JSON.stringify({ platform }) });
+      toast.success("Synced");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
+  const handleSaveWorkspace = async () => {
+    if (!workspace) return;
+    setSaving(true);
+    try {
+      const updated = await clientApi<Workspace>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: workspace.name,
+          currency: workspace.currency,
+          timezone: workspace.timezone,
+        }),
+      });
+      setWorkspace(updated);
+      toast.success("Workspace settings saved");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addPipeline = () => {
@@ -270,12 +353,12 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-4">
                     <Avatar className="h-16 w-16">
                       <AvatarFallback className="bg-primary/10 text-primary text-lg font-medium">
-                        {demoUser.name.split(" ").map((n) => n[0]).join("")}
+                        {(me?.name || "User").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium">{demoUser.name}</p>
-                      <Badge variant="secondary" className="capitalize mt-1">{demoUser.role}</Badge>
+                      <p className="font-medium">{me?.name || "User"}</p>
+                      <Badge variant="secondary" className="capitalize mt-1">{me?.role || "agent"}</Badge>
                     </div>
                   </div>
                   <Separator />
@@ -356,10 +439,11 @@ export default function SettingsPage() {
                         </div>
                         <div>
                           <p className="font-medium text-sm">{conn.label}</p>
-                          {conn.connected ? (
+                          {conn.status === "connected" ? (
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <CheckCircle className="h-3 w-3 text-success" />
-                              Synced {conn.lastSync} · {conn.accounts} account{conn.accounts !== 1 ? "s" : ""}
+                              {conn.lastSync ? `Last sync ${new Date(conn.lastSync).toLocaleString()}` : "Connected"}
+                              {conn.accountId ? ` · ${conn.accountId}` : ""}
                             </p>
                           ) : (
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -370,7 +454,7 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {conn.connected ? (
+                        {conn.status === "connected" ? (
                           <>
                             <Button
                               variant="outline"
@@ -616,10 +700,8 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {[
-                    { id: "admin", role: "Admin", members: 1, color: "#EF4444", permissions: ["All Leads", "All Campaigns", "Settings", "Team Management", "Billing", "Integrations"] },
-                    { id: "manager", role: "Manager", members: 2, color: "#F59E0B", permissions: ["Assigned Leads", "All Campaigns", "Analytics", "Reports"] },
-                    { id: "agent", role: "Agent", members: 5, color: "#3B82F6", permissions: ["Assigned Leads", "Basic Analytics", "Tasks"] },
-                    { id: "viewer", role: "Viewer", members: 1, color: "#8B5CF6", permissions: ["Read-only Dashboards", "Read-only Reports"] },
+                    { id: "admin", role: "Admin", members: roleCounts.admin, color: "#EF4444", permissions: ["All Leads", "All Campaigns", "Settings", "Team Management", "Integrations"] },
+                    { id: "agent", role: "Agent", members: roleCounts.agent, color: "#3B82F6", permissions: ["Assigned Leads", "Basic Analytics", "Tasks"] },
                   ].map((item) => (
                     <div key={item.id} className="p-3 rounded-lg border">
                       <div className="flex items-center justify-between">
@@ -650,22 +732,22 @@ export default function SettingsPage() {
                   <CardDescription>Assign roles to team members.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {[
-                    { name: "Sarah Chen", email: "sarah@leadops.io", role: "Admin", avatar: "SC" },
-                    { name: "James Rivera", email: "james@leadops.io", role: "Manager", avatar: "JR" },
-                    { name: "Mike Johnson", email: "mike@leadops.io", role: "Agent", avatar: "MJ" },
-                  ].map((member) => (
+                  {teamMembers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No team members found.</p>
+                  ) : teamMembers.map((member) => (
                     <div key={member.email} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">{member.avatar}</AvatarFallback>
+                          <AvatarFallback className="text-xs">
+                            {member.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium">{member.name}</p>
                           <p className="text-xs text-muted-foreground">{member.email}</p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="text-[10px]">{member.role}</Badge>
+                      <Badge variant="outline" className="text-[10px] capitalize">{member.role}</Badge>
                     </div>
                   ))}
                 </CardContent>
@@ -704,13 +786,13 @@ export default function SettingsPage() {
                     <Label>Revenue Currency</Label>
                     <Input
                       placeholder="USD"
-                      defaultValue="USD"
-                      onChange={(e) => e.target.value.toUpperCase()}
+                      value={workspace?.currency ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev)}
                     />
                     <p className="text-xs text-muted-foreground">Currency for revenue reporting across all platforms</p>
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={() => toast.success("Revenue settings saved")}>Save</Button>
+                    <Button onClick={handleSaveWorkspace} disabled={saving || !workspace}>Save</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -729,8 +811,8 @@ export default function SettingsPage() {
                     <Label>Default Currency</Label>
                     <Input
                       placeholder="USD"
-                      defaultValue="USD"
-                      onChange={(e) => e.target.value.toUpperCase()}
+                      value={workspace?.currency ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev)}
                     />
                     <p className="text-xs text-muted-foreground">e.g., USD, EUR, GBP</p>
                   </div>
@@ -744,20 +826,27 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Timezone</Label>
-                    <select className="w-full h-9 rounded-md border bg-background px-3 text-sm">
-                      <option>Eastern Time (ET)</option>
-                      <option>Central Time (CT)</option>
-                      <option>Mountain Time (MT)</option>
-                      <option>Pacific Time (PT)</option>
-                      <option>UTC</option>
+                    <select
+                      className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                      value={workspace?.timezone ?? "UTC"}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, timezone: e.target.value } : prev)}
+                    >
+                      <option value="UTC">UTC</option>
+                      <option value="Africa/Cairo">Africa/Cairo</option>
+                      <option value="Asia/Riyadh">Asia/Riyadh</option>
+                      <option value="Europe/London">Europe/London</option>
+                      <option value="America/New_York">America/New_York</option>
                     </select>
                   </div>
                   <div className="space-y-2">
                     <Label>Workspace Name</Label>
-                    <Input defaultValue="LeadOps Demo" />
+                    <Input
+                      value={workspace?.name ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                    />
                   </div>
                   <div className="flex justify-end">
-                    <Button onClick={() => toast.success("Workspace settings saved")}>Save</Button>
+                    <Button onClick={handleSaveWorkspace} disabled={saving || !workspace}>Save</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -771,23 +860,15 @@ export default function SettingsPage() {
                 <CardDescription>Track all changes and actions in your workspace.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                {[
-                  { time: "10:32 AM", user: "Sarah Chen", action: "Updated campaign budget", target: "Q3 Lead Gen", type: "update" },
-                  { time: "10:28 AM", user: "James Rivera", action: "Moved lead to Won", target: "Alex Thompson", type: "status" },
-                  { time: "10:15 AM", user: "Sarah Chen", action: "Connected Meta Ads", target: "Platform Settings", type: "config" },
-                  { time: "09:45 AM", user: "Mike Johnson", action: "Created new campaign", target: "Fall Promo 2026", type: "create" },
-                  { time: "09:30 AM", user: "Sarah Chen", action: "Changed team role", target: "James Rivera → Manager", type: "permission" },
-                  { time: "09:00 AM", user: "System", action: "Auto-sync completed", target: "Meta, Google", type: "system" },
-                  { time: "Yesterday", user: "Sarah Chen", action: "Exported lead report", target: "Sep 2026 Leads", type: "export" },
-                  { time: "Yesterday", user: "James Rivera", action: "Deleted campaign", target: "Old Test Campaign", type: "delete" },
-                ].map((entry, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                {auditEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No audit events yet.</p>
+                ) : auditEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
                     <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-muted-foreground w-16 shrink-0">{entry.time}</span>
-                    <span className="text-sm font-medium w-28 shrink-0">{entry.user}</span>
+                    <span className="text-xs text-muted-foreground w-28 shrink-0">{new Date(entry.createdAt).toLocaleString()}</span>
+                    <span className="text-sm font-medium w-28 shrink-0">{entry.userName}</span>
                     <span className="text-sm flex-1">{entry.action}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-48">{entry.target}</span>
-                    <Badge variant="outline" className="text-[10px] shrink-0">{entry.type}</Badge>
+                    {entry.entityId && <span className="text-xs text-muted-foreground truncate max-w-48">{entry.entityId}</span>}
                   </div>
                 ))}
               </CardContent>
@@ -830,29 +911,17 @@ export default function SettingsPage() {
                   <CardDescription>Manage your active login sessions.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {[
-                    { device: "Chrome on Windows", location: "New York, US", current: true, time: "Active now" },
-                    { device: "Safari on iPhone", location: "New York, US", current: false, time: "2 hours ago" },
-                  ].map((session, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {session.device}
-                          {session.current && (
-                            <Badge variant="secondary" className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 border-0">
-                              Current
-                            </Badge>
-                          )}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{session.location} · {session.time}</p>
-                      </div>
-                      {!session.current && (
-                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                          Revoke
-                        </Button>
-                      )}
+                  <div className="flex items-center justify-between p-3 rounded-lg border">
+                    <div>
+                      <p className="text-sm font-medium">
+                        Current session
+                        <Badge variant="secondary" className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 border-0">
+                          Active
+                        </Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground">Other session management is not enabled yet.</p>
                     </div>
-                  ))}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -865,9 +934,9 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">Delete Account</p>
-                      <p className="text-xs text-muted-foreground">Permanently delete your account and all data.</p>
+                      <p className="text-xs text-muted-foreground">Account deletion is not enabled. Delete workspaces from the workspace menu.</p>
                     </div>
-                    <Button variant="destructive" size="sm">
+                    <Button variant="destructive" size="sm" disabled>
                       <Trash2 className="h-3.5 w-3.5 mr-1" />
                       Delete
                     </Button>
