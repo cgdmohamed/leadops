@@ -20,38 +20,11 @@ const severityConfig: Record<Severity, { icon: typeof TrendingUp; color: string;
   critical: { icon: AlertCircle, color: "text-red-600", bgColor: "bg-red-50", borderColor: "border-red-200", label: "Critical" },
 };
 
-const demoInsights: Insight[] = [
-  {
-    severity: "opportunity",
-    title: "Google Search outperforming",
-    description: "Google Search generated 38% of total revenue from 24% of ad spend. Consider increasing budget allocation.",
-    metric: "+38% revenue",
-  },
-  {
-    severity: "warning",
-    title: "Meta qualification rate dropping",
-    description: "Meta lead volume increased 12%, but qualification rate dropped by 18% compared to last month.",
-    metric: "-18% qual rate",
-  },
-  {
-    severity: "critical",
-    title: "12 leads exceeded SLA",
-    description: "12 new leads have not been contacted within the 15-minute first response SLA.",
-    metric: "12 breached",
-  },
-  {
-    severity: "positive",
-    title: "Revenue above target",
-    description: "Revenue is 14% above the previous period. Won deals increased by 8 this month.",
-    metric: "+14% revenue",
-  },
-];
-
 interface ExecutiveInsightsProps {
   insights?: Insight[];
 }
 
-export function ExecutiveInsights({ insights = demoInsights }: ExecutiveInsightsProps) {
+export function ExecutiveInsights({ insights = [] }: ExecutiveInsightsProps) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -61,6 +34,13 @@ export function ExecutiveInsights({ insights = demoInsights }: ExecutiveInsights
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
+        {insights.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground">
+            <Info className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            <p className="text-sm font-medium">No insights yet</p>
+            <p className="text-xs mt-1">Insights will appear after enough real campaign and lead data is available.</p>
+          </div>
+        ) : null}
         {insights.map((insight, i) => {
           const config = severityConfig[insight.severity];
           const Icon = config.icon;
