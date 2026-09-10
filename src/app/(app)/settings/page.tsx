@@ -258,553 +258,704 @@ export default function SettingsPage() {
     }]);
     setNewPipelineName("");
     setShowNewPipeline(false);
+    toast.success("Pipeline created");
   };
 
-  const updatePipelineName = (pipelineId: string, name: string) => {
-    setPipelines((prev) => prev.map((p) => p.id === pipelineId ? { ...p, name } : p));
-  };
-
-  const deletePipeline = (pipelineId: string) => {
-    setPipelines((prev) => prev.filter((p) => p.id !== pipelineId));
-  };
-
-  const updateStage = (pipelineId: string, stageId: string, updates: { name?: string; probability?: number }) => {
-    setPipelines((prev) => prev.map((p) => p.id === pipelineId ? {
-      ...p,
-      stages: p.stages.map((s) => s.id === stageId ? { ...s, ...updates } : s),
-    } : p));
+  const deletePipeline = (id: string) => {
+    setPipelines((prev) => prev.filter((p) => p.id !== id));
+    toast.success("Pipeline deleted");
   };
 
   const addStage = (pipelineId: string) => {
-    setPipelines((prev) => prev.map((p) => p.id === pipelineId ? {
-      ...p,
-      stages: [...p.stages, { id: `s_${Date.now()}`, name: "New Stage", color: "#6B7280", probability: 50 }],
-    } : p));
+    setPipelines((prev) => prev.map((p) => {
+      if (p.id !== pipelineId) return p;
+      const newStage = {
+        id: `s_${Date.now()}`,
+        name: "New Stage",
+        color: "#8B5CF6",
+        probability: 50,
+      };
+      const insertIdx = p.stages.length - 2;
+      const stages = [...p.stages];
+      stages.splice(insertIdx, 0, newStage);
+      return { ...p, stages };
+    }));
+  };
+
+  const updateStage = (pipelineId: string, stageId: string, updates: { name?: string; probability?: number; color?: string }) => {
+    setPipelines((prev) => prev.map((p) => {
+      if (p.id !== pipelineId) return p;
+      return { ...p, stages: p.stages.map((s) => s.id === stageId ? { ...s, ...updates } : s) };
+    }));
   };
 
   const deleteStage = (pipelineId: string, stageId: string) => {
-    setPipelines((prev) => prev.map((p) => p.id === pipelineId ? {
-      ...p,
-      stages: p.stages.filter((s) => s.id !== stageId),
-    } : p));
+    setPipelines((prev) => prev.map((p) => {
+      if (p.id !== pipelineId) return p;
+      return { ...p, stages: p.stages.filter((s) => s.id !== stageId) };
+    }));
   };
 
-  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: workspace?.currency ?? "USD",
-    maximumFractionDigits: 0,
-  }).format(amount);
+  const moveStage = (pipelineId: string, stageId: string, direction: "up" | "down") => {
+    setPipelines((prev) => prev.map((p) => {
+      if (p.id !== pipelineId) return p;
+      const idx = p.stages.findIndex((s) => s.id === stageId);
+      if (idx === -1) return p;
+      const newIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= p.stages.length) return p;
+      const stages = [...p.stages];
+      [stages[idx], stages[newIdx]] = [stages[newIdx], stages[idx]];
+      return { ...p, stages };
+    }));
+  };
+
+  const colorOptions = [
+    "#3B82F6", "#6366F1", "#8B5CF6", "#A855F7", "#D946EF",
+    "#EC4899", "#F43F5E", "#EF4444", "#F97316", "#F59E0B",
+    "#EAB308", "#84CC16", "#22C55E", "#10B981", "#14B8A6",
+    "#06B6D4", "#0EA5E9",
+  ];
 
   return (
-    <div className="space-y-4 max-w-[1200px]">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account, workspace, integrations, and security preferences.</p>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="text-muted-foreground">Manage your account, integrations, and preferences.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
-        {/* Sidebar Navigation */}
-        <Card className="h-fit">
-          <CardContent className="p-2">
-            <nav className="space-y-1">
-              {sections.map((section) => {
-                const Icon = section.icon;
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => setActiveSection(section.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      activeSection === section.id
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{section.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </CardContent>
-        </Card>
+      <div className="flex gap-6">
+        <nav className="w-48 shrink-0 space-y-1">
+          {sections.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setActiveSection(s.id)}
+              className={`w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                activeSection === s.id
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <s.icon className="h-4 w-4" />
+              {s.label}
+            </button>
+          ))}
+        </nav>
 
-        {/* Content */}
-        <div className="space-y-4">
-          {/* Profile */}
+        <div className="flex-1 min-w-0">
           {activeSection === "profile" && (
             <Card>
               <CardHeader>
                 <CardTitle>Profile</CardTitle>
-                <CardDescription>Update your personal information</CardDescription>
+                <CardDescription>Your personal information.</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSaveProfile} className="space-y-6">
+                <form onSubmit={handleSaveProfile} className="space-y-4">
                   <div className="flex items-center gap-4">
-                    <Avatar className="h-20 w-20">
-                      <AvatarFallback className="text-xl bg-primary text-primary-foreground">
-                        {(me?.name ?? "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                    <Avatar className="h-16 w-16">
+                      <AvatarFallback className="bg-primary/10 text-primary text-lg font-medium">
+                        {(me?.name || "User").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <Button type="button" variant="outline" size="sm">Change Photo</Button>
-                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG or GIF. Max 2MB.</p>
+                      <p className="font-medium">{me?.name || "User"}</p>
+                      <Badge variant="secondary" className="capitalize mt-1">{me?.role || "agent"}</Badge>
                     </div>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <Separator />
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name</Label>
                       <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
+                      <Label htmlFor="email">Email</Label>
                       <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Role</Label>
-                    <Input value={me?.role ?? ""} disabled />
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={saving}>
+                      {saving ? "Saving..." : "Save Changes"}
+                    </Button>
                   </div>
-                  <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
                 </form>
               </CardContent>
             </Card>
           )}
 
-          {/* Password */}
           {activeSection === "password" && (
             <Card>
               <CardHeader>
                 <CardTitle>Password</CardTitle>
-                <CardDescription>Change your password</CardDescription>
+                <CardDescription>Change your password.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleChangePassword} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="current-password">Current Password</Label>
-                    <Input id="current-password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                    <Input
+                      id="current-password"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="new-password">New Password</Label>
-                    <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                    <p className="text-xs text-muted-foreground">Must be at least 12 characters.</p>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
                   </div>
-                  <Button type="submit" disabled={saving}>{saving ? "Changing..." : "Change Password"}</Button>
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={saving || !currentPassword || !newPassword}>
+                      {saving ? "Changing..." : "Change Password"}
+                    </Button>
+                  </div>
                 </form>
               </CardContent>
             </Card>
           )}
 
-          {/* Platforms */}
           {activeSection === "platforms" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Platform Connections</CardTitle>
-                <CardDescription>Connect your advertising platforms to sync campaign data</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {connections.map((conn) => (
-                  <div key={conn.platform} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <PlatformIcon platform={conn.platform} size="lg" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium">{conn.label}</h3>
-                          {conn.status === "connected" && <Badge variant="success" className="text-xs">Connected</Badge>}
-                          {conn.status === "error" && <Badge variant="destructive" className="text-xs">Error</Badge>}
-                          {conn.status === "disconnected" && <Badge variant="secondary" className="text-xs">Not Connected</Badge>}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {conn.status === "connected" && `Account: ${conn.accountId ?? "Connected account"} - Last sync: ${conn.lastSync ?? "Not synced yet"}`}
-                          {conn.status === "error" && "Connection error. Please reconnect."}
-                          {conn.status === "disconnected" && "Connect to import campaigns, leads, and performance metrics"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {conn.status === "connected" ? (
-                        <>
-                          <Button variant="outline" size="sm" onClick={() => handleSync(conn.platform)}>
-                            Sync Now
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => setDisconnectId(conn.platform)}>
-                            Disconnect
-                          </Button>
-                        </>
-                      ) : (
-                        <Button size="sm" onClick={handleConnect}>
-                          <ExternalLink className="h-4 w-4 mr-1" />
-                          Connect
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Pipelines */}
-          {activeSection === "pipelines" && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Pipelines & Stages</CardTitle>
-                    <CardDescription>Customize your sales pipelines and stage probabilities</CardDescription>
-                  </div>
-                  <Button size="sm" onClick={() => setShowNewPipeline(true)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Pipeline
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {showNewPipeline && (
-                  <div className="flex gap-2 p-4 border rounded-lg bg-muted/30">
-                    <Input
-                      placeholder="Pipeline name"
-                      value={newPipelineName}
-                      onChange={(e) => setNewPipelineName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addPipeline()}
-                    />
-                    <Button onClick={addPipeline}>Add</Button>
-                    <Button variant="outline" onClick={() => setShowNewPipeline(false)}>Cancel</Button>
-                  </div>
-                )}
-
-                {pipelines.map((pipeline) => (
-                  <div key={pipeline.id} className="border rounded-lg overflow-hidden">
-                    <div className="bg-muted/50 p-4 flex items-center justify-between">
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Platform Connections</CardTitle>
+                  <CardDescription>Connect your ad platforms to sync campaign data.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {connections.map((conn) => (
+                    <div
+                      key={conn.platform}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                    >
                       <div className="flex items-center gap-3">
-                        <GitBranch className="h-5 w-5 text-muted-foreground" />
-                        <Input
-                          value={pipeline.name}
-                          onChange={(e) => updatePipelineName(pipeline.id, e.target.value)}
-                          className="font-medium border-0 bg-transparent p-0 h-auto focus-visible:ring-0 w-48"
-                        />
-                        {pipeline.isDefault && <Badge variant="secondary">Default</Badge>}
-                      </div>
-                      {!pipeline.isDefault && (
-                        <Button variant="ghost" size="icon" onClick={() => deletePipeline(pipeline.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="p-4 space-y-2">
-                      {pipeline.stages.map((stage) => (
-                        <div key={stage.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
-                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-move" />
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: stage.color }} />
-                          {editingStage === stage.id ? (
-                            <Input
-                              value={stage.name}
-                              onChange={(e) => updateStage(pipeline.id, stage.id, { name: e.target.value })}
-                              onBlur={() => setEditingStage(null)}
-                              onKeyDown={(e) => e.key === "Enter" && setEditingStage(null)}
-                              autoFocus
-                              className="flex-1 h-8"
-                            />
+                        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                          <PlatformIcon platform={conn.platform} className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{conn.label}</p>
+                          {conn.status === "connected" ? (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3 text-success" />
+                              {conn.lastSync ? `Last sync ${new Date(conn.lastSync).toLocaleString()}` : "Connected"}
+                              {conn.accountId ? ` · ${conn.accountId}` : ""}
+                            </p>
                           ) : (
-                            <span className="flex-1 font-medium" onClick={() => setEditingStage(stage.id)}>{stage.name}</span>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={stage.probability}
-                              onChange={(e) => updateStage(pipeline.id, stage.id, { probability: parseInt(e.target.value) || 0 })}
-                              className="w-20 h-8 text-right"
-                            />
-                            <span className="text-sm text-muted-foreground">%</span>
-                          </div>
-                          <Button variant="ghost" size="icon" onClick={() => setEditingStage(stage.id)}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          {pipeline.stages.length > 2 && (
-                            <Button variant="ghost" size="icon" onClick={() => deleteStage(pipeline.id, stage.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              Not connected
+                            </p>
                           )}
                         </div>
-                      ))}
-                      <Button variant="outline" size="sm" onClick={() => addStage(pipeline.id)} className="w-full mt-2">
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add Stage
-                      </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {conn.status === "connected" ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSync(conn.platform)}
+                            >
+                              Sync
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDisconnectId(conn.platform)}
+                            >
+                              Disconnect
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={handleConnect}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                            Connect
+                          </Button>
+                        )}
+                      </div>
                     </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Data Sync</CardTitle>
+                  <CardDescription>Control how often data is synced from connected platforms.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Auto-sync</p>
+                      <p className="text-xs text-muted-foreground">Automatically sync data every 15 minutes</p>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input type="checkbox" defaultChecked className="peer sr-only" />
+                      <div className="h-5 w-9 rounded-full bg-muted peer-checked:bg-primary after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+                    </label>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Sync leads</p>
+                      <p className="text-xs text-muted-foreground">Import new leads from ad platforms</p>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input type="checkbox" defaultChecked className="peer sr-only" />
+                      <div className="h-5 w-9 rounded-full bg-muted peer-checked:bg-primary after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+                    </label>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Sync campaign metrics</p>
+                      <p className="text-xs text-muted-foreground">Update spend, impressions, and conversions</p>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input type="checkbox" defaultChecked className="peer sr-only" />
+                      <div className="h-5 w-9 rounded-full bg-muted peer-checked:bg-primary after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+                    </label>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={() => toast.success("Sync settings saved")}>Save Preferences</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
-          {/* Notifications */}
+          {activeSection === "pipelines" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Pipelines</h2>
+                  <p className="text-sm text-muted-foreground">Configure your sales pipelines and stages.</p>
+                </div>
+                <Button onClick={() => setShowNewPipeline(!showNewPipeline)} size="sm">
+                  <Plus className="h-4 w-4 mr-1" /> New Pipeline
+                </Button>
+              </div>
+
+              {showNewPipeline && (
+                <Card className="border-dashed">
+                  <CardContent className="p-4 flex gap-2">
+                    <Input placeholder="Pipeline name..." value={newPipelineName} onChange={(e) => setNewPipelineName(e.target.value)} className="flex-1" onKeyDown={(e) => e.key === "Enter" && addPipeline()} />
+                    <Button onClick={addPipeline} disabled={!newPipelineName.trim()}>Create</Button>
+                    <Button variant="ghost" onClick={() => setShowNewPipeline(false)}>Cancel</Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {pipelines.map((pipeline) => (
+                <Card key={pipeline.id}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base">{pipeline.name}</CardTitle>
+                        {pipeline.isDefault && <Badge variant="secondary" className="text-[10px]">Default</Badge>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => addStage(pipeline.id)}>
+                          <Plus className="h-3 w-3 mr-1" /> Stage
+                        </Button>
+                        {!pipeline.isDefault && (
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => deletePipeline(pipeline.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <CardDescription>{pipeline.stages.length} stages</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {pipeline.stages.map((stage, i) => {
+                      const isEditing = editingStage === stage.id;
+                      const isWon = stage.name.toLowerCase() === "won";
+                      const isLost = stage.name.toLowerCase() === "lost";
+                      return (
+                        <div key={stage.id} className="flex items-center gap-2 p-2 rounded-lg border bg-card hover:bg-muted/50">
+                          <GripVertical className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                          <div className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+                          {isEditing ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <Input
+                                defaultValue={stage.name}
+                                className="h-7 text-xs flex-1"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    updateStage(pipeline.id, stage.id, { name: e.currentTarget.value });
+                                    setEditingStage(null);
+                                  }
+                                  if (e.key === "Escape") setEditingStage(null);
+                                }}
+                                onBlur={(e) => {
+                                  updateStage(pipeline.id, stage.id, { name: e.target.value });
+                                  setEditingStage(null);
+                                }}
+                              />
+                              <Input
+                                type="number"
+                                defaultValue={stage.probability}
+                                className="h-7 text-xs w-16"
+                                placeholder="%"
+                                onBlur={(e) => updateStage(pipeline.id, stage.id, { probability: Number(e.target.value) })}
+                              />
+                              <div className="flex gap-0.5">
+                                {colorOptions.slice(0, 8).map((c) => (
+                                  <button
+                                    key={c}
+                                    className="h-4 w-4 rounded-full border border-border"
+                                    style={{ backgroundColor: c }}
+                                    onClick={() => updateStage(pipeline.id, stage.id, { color: c })}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-sm font-medium flex-1">{stage.name}</span>
+                              <Badge variant="outline" className="text-[10px]">{stage.probability}%</Badge>
+                              <div className="flex items-center gap-0.5">
+                                {!isWon && !isLost && i > 0 && (
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => moveStage(pipeline.id, stage.id, "up")}>↑</Button>
+                                )}
+                                {!isWon && !isLost && i < pipeline.stages.length - 1 && (
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => moveStage(pipeline.id, stage.id, "down")}>↓</Button>
+                                )}
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setEditingStage(stage.id)}>
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                                {!isWon && !isLost && !pipeline.isDefault && (
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => deleteStage(pipeline.id, stage.id)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
           {activeSection === "notifications" && (
             <Card>
               <CardHeader>
                 <CardTitle>Notifications</CardTitle>
-                <CardDescription>Configure how you receive alerts and updates</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {[
-                  { title: "New Lead Assigned", description: "When a new lead is assigned to you", enabled: true },
-                  { title: "Lead Status Changed", description: "When a lead status is updated", enabled: true },
-                  { title: "Campaign Performance", description: "Daily summary of campaign metrics", enabled: false },
-                  { title: "Goal Progress", description: "When goals reach 80% or 100%", enabled: true },
-                  { title: "Team Updates", description: "When team members join or leave", enabled: false },
-                ].map((notification, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">{notification.title}</h4>
-                      <p className="text-sm text-muted-foreground">{notification.description}</p>
-                    </div>
-                    <button
-                      onClick={() => {}}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${notification.enabled ? "bg-primary" : "bg-muted"}`}
-                    >
-                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${notification.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-                    </button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Roles */}
-          {activeSection === "roles" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Roles & Permissions</CardTitle>
-                <CardDescription>Manage role permissions for your workspace</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                  {[
-                    { role: "Admin", count: roleCounts.admin, color: "bg-primary" },
-                    { role: "Agent", count: roleCounts.agent, color: "bg-blue-500" },
-                  ].map((role) => (
-                    <Card key={role.role}>
-                      <CardContent className="p-4">
-                        <div className={`w-10 h-10 rounded-lg ${role.color} flex items-center justify-center mb-3`}>
-                          <Shield className="h-5 w-5 text-white" />
-                        </div>
-                        <h3 className="font-semibold">{role.role}</h3>
-                        <p className="text-sm text-muted-foreground">{role.count} members</p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                <Separator />
-                <div>
-                  <h3 className="font-medium mb-3">Team Members</h3>
-                  <div className="space-y-2">
-                    {teamMembers.length === 0 ? (
-                      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                        Team members will appear here after they are invited.
-                      </div>
-                    ) : teamMembers.map((member) => (
-                      <div key={member.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>{member.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{member.name}</p>
-                            <p className="text-sm text-muted-foreground">{member.email}</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline">{member.role}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Revenue */}
-          {activeSection === "revenue" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Revenue Definitions</CardTitle>
-                <CardDescription>Configure how revenue is calculated and attributed</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  {[
-                    { label: "Closed Won Revenue", description: "Revenue from opportunities marked as won", enabled: true },
-                    { label: "Collected Revenue", description: "Only count revenue after payment is received", enabled: true },
-                    { label: "Recurring Revenue", description: "Include monthly/annual recurring revenue", enabled: false },
-                    { label: "Upsell Revenue", description: "Track expansion revenue from existing customers", enabled: true },
-                  ].map((def, index) => (
-                    <div key={index} className="flex items-start gap-3 p-4 border rounded-lg">
-                      <input type="checkbox" checked={def.enabled} readOnly className="mt-1" />
-                      <div>
-                        <h4 className="font-medium">{def.label}</h4>
-                        <p className="text-sm text-muted-foreground">{def.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <Separator />
-                <div className="space-y-2">
-                  <Label>Default Currency</Label>
-                  <select
-                    value={workspace?.currency ?? "USD"}
-                    onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value } : prev)}
-                    className="w-full h-10 rounded-md border border-input bg-background px-3"
-                  >
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="EUR">EUR - Euro</option>
-                    <option value="GBP">GBP - British Pound</option>
-                    <option value="EGP">EGP - Egyptian Pound</option>
-                    <option value="SAR">SAR - Saudi Riyal</option>
-                    <option value="AED">AED - UAE Dirham</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Currency */}
-          {activeSection === "currency" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Currency & Workspace</CardTitle>
-                <CardDescription>Manage workspace settings and localization</CardDescription>
+                <CardDescription>Manage your notification preferences.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Workspace Name</Label>
-                  <Input value={workspace?.name ?? ""} onChange={(e) => setWorkspace((prev) => prev ? { ...prev, name: e.target.value } : prev)} />
+                {[
+                  { label: "New lead assigned", desc: "Get notified when a lead is assigned to you" },
+                  { label: "Lead status change", desc: "Get notified when a lead you own changes stage" },
+                  { label: "Campaign paused", desc: "Alert when a campaign is paused due to budget" },
+                  { label: "Weekly summary", desc: "Receive a weekly performance summary" },
+                  { label: "Low ROAS alert", desc: "Notify when campaign ROAS drops below 2x" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.desc}</p>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input type="checkbox" defaultChecked className="peer sr-only" />
+                      <div className="h-5 w-9 rounded-full bg-muted peer-checked:bg-primary after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+                    </label>
+                  </div>
+                ))}
+                <div className="flex justify-end">
+                  <Button onClick={() => toast.success("Preferences saved")}>Save Preferences</Button>
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+              </CardContent>
+            </Card>
+          )}
+
+          {activeSection === "roles" && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Roles & Permissions</CardTitle>
+                      <CardDescription>Manage team roles and access levels.</CardDescription>
+                    </div>
+                    <Button size="sm" variant="outline">
+                      <Key className="h-3.5 w-3.5 mr-1" /> Create Custom Role
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    { id: "admin", role: "Admin", members: roleCounts.admin, color: "#EF4444", permissions: ["All Leads", "All Campaigns", "Settings", "Team Management", "Integrations"] },
+                    { id: "agent", role: "Agent", members: roleCounts.agent, color: "#3B82F6", permissions: ["Assigned Leads", "Basic Analytics", "Tasks"] },
+                  ].map((item) => (
+                    <div key={item.id} className="p-3 rounded-lg border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                          <div>
+                            <p className="text-sm font-medium">{item.role}</p>
+                            <p className="text-[10px] text-muted-foreground">{item.members} members</p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => toast.success(`Edit ${item.role} permissions`)}>
+                          <Edit2 className="h-3 w-3 mr-1" /> Edit
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {item.permissions.map((p) => (
+                          <Badge key={p} variant="secondary" className="text-[9px] px-1.5 py-0">{p}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Team Members</CardTitle>
+                  <CardDescription>Assign roles to team members.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {teamMembers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No team members found.</p>
+                  ) : teamMembers.map((member) => (
+                    <div key={member.email} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            {member.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium">{member.name}</p>
+                          <p className="text-xs text-muted-foreground">{member.email}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] capitalize">{member.role}</Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {activeSection === "revenue" && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revenue Definitions</CardTitle>
+                  <CardDescription>Configure how revenue is calculated and attributed.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {[
+                    { name: "First-Touch Attribution", desc: "Credit the first ad platform the lead interacted with", enabled: false },
+                    { name: "Last-Touch Attribution", desc: "Credit the last ad platform before conversion", enabled: true },
+                    { name: "Linear Attribution", desc: "Split credit equally across all touchpoints", enabled: false },
+                    { name: "Include Opp Revenue", desc: "Count opportunity values in pipeline revenue", enabled: true },
+                    { name: "Include Won Revenue", desc: "Count closed-won deal values in total revenue", enabled: true },
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">{item.desc}</p>
+                      </div>
+                      <label className="relative inline-flex cursor-pointer items-center">
+                        <input type="checkbox" defaultChecked={item.enabled} className="peer sr-only" />
+                        <div className="h-5 w-9 rounded-full bg-muted peer-checked:bg-primary after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+                      </label>
+                    </div>
+                  ))}
+                  <Separator className="my-4" />
                   <div className="space-y-2">
-                    <Label>Currency</Label>
-                    <select
-                      value={workspace?.currency ?? "USD"}
-                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value } : prev)}
-                      className="w-full h-10 rounded-md border border-input bg-background px-3"
-                    >
-                      <option value="USD">USD - US Dollar</option>
-                      <option value="EUR">EUR - Euro</option>
-                      <option value="GBP">GBP - British Pound</option>
-                      <option value="EGP">EGP - Egyptian Pound</option>
-                      <option value="SAR">SAR - Saudi Riyal</option>
-                      <option value="AED">AED - UAE Dirham</option>
+                    <Label>Revenue Currency</Label>
+                    <Input
+                      placeholder="USD"
+                      value={workspace?.currency ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev)}
+                    />
+                    <p className="text-xs text-muted-foreground">Currency for revenue reporting across all platforms</p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleSaveWorkspace} disabled={saving || !workspace}>Save</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {activeSection === "currency" && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Currency & Workspace</CardTitle>
+                  <CardDescription>Set your workspace currency and regional preferences.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Default Currency</Label>
+                    <Input
+                      placeholder="USD"
+                      value={workspace?.currency ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev)}
+                    />
+                    <p className="text-xs text-muted-foreground">e.g., USD, EUR, GBP</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date Format</Label>
+                    <select className="w-full h-9 rounded-md border bg-background px-3 text-sm">
+                      <option>MM/DD/YYYY</option>
+                      <option>DD/MM/YYYY</option>
+                      <option>YYYY-MM-DD</option>
                     </select>
                   </div>
                   <div className="space-y-2">
                     <Label>Timezone</Label>
                     <select
+                      className="w-full h-9 rounded-md border bg-background px-3 text-sm"
                       value={workspace?.timezone ?? "UTC"}
                       onChange={(e) => setWorkspace((prev) => prev ? { ...prev, timezone: e.target.value } : prev)}
-                      className="w-full h-10 rounded-md border border-input bg-background px-3"
                     >
                       <option value="UTC">UTC</option>
-                      <option value="America/New_York">Eastern Time</option>
-                      <option value="America/Los_Angeles">Pacific Time</option>
-                      <option value="Europe/London">London</option>
-                      <option value="Africa/Cairo">Cairo</option>
-                      <option value="Asia/Dubai">Dubai</option>
+                      <option value="Africa/Cairo">Africa/Cairo</option>
+                      <option value="Asia/Riyadh">Asia/Riyadh</option>
+                      <option value="Europe/London">Europe/London</option>
+                      <option value="America/New_York">America/New_York</option>
                     </select>
                   </div>
-                </div>
-                <Button onClick={handleSaveWorkspace} disabled={saving || !workspace}>{saving ? "Saving..." : "Save Workspace Settings"}</Button>
-              </CardContent>
-            </Card>
+                  <div className="space-y-2">
+                    <Label>Workspace Name</Label>
+                    <Input
+                      value={workspace?.name ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleSaveWorkspace} disabled={saving || !workspace}>Save</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
-          {/* Audit Log */}
           {activeSection === "audit" && (
             <Card>
               <CardHeader>
                 <CardTitle>Audit Log</CardTitle>
-                <CardDescription>Recent security and configuration changes</CardDescription>
+                <CardDescription>Track all changes and actions in your workspace.</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {auditEntries.length === 0 ? (
-                    <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                      No audit events have been recorded yet.
-                    </div>
-                  ) : auditEntries.map((entry) => (
-                    <div key={entry.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                      <History className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{entry.action}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {entry.userName} - {new Date(entry.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <CardContent className="space-y-2">
+                {auditEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No audit events yet.</p>
+                ) : auditEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                    <History className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground w-28 shrink-0">{new Date(entry.createdAt).toLocaleString()}</span>
+                    <span className="text-sm font-medium w-28 shrink-0">{entry.userName}</span>
+                    <span className="text-sm flex-1">{entry.action}</span>
+                    {entry.entityId && <span className="text-xs text-muted-foreground truncate max-w-48">{entry.entityId}</span>}
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
 
-          {/* Security */}
           {activeSection === "security" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Security</CardTitle>
-                <CardDescription>Manage security settings and active sessions</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {twoFactor ? <CheckCircle className="h-5 w-5 text-green-500" /> : <AlertCircle className="h-5 w-5 text-yellow-500" />}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Two-Factor Authentication</CardTitle>
+                  <CardDescription>Add an extra layer of security to your account.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-medium">Two-Factor Authentication</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {twoFactor ? "Your account is protected with 2FA" : "Add an extra layer of security"}
+                      <p className="text-sm font-medium">{twoFactor ? "Enabled" : "Disabled"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {twoFactor
+                          ? "Your account is protected with 2FA."
+                          : "We recommend enabling 2FA for your account."}
                       </p>
                     </div>
+                    <Button
+                      variant={twoFactor ? "outline" : "default"}
+                      onClick={() => {
+                        setTwoFactor(!twoFactor);
+                        toast.success(twoFactor ? "2FA disabled" : "2FA enabled");
+                      }}
+                    >
+                      {twoFactor ? "Disable" : "Enable"}
+                    </Button>
                   </div>
-                  <Button variant={twoFactor ? "outline" : "default"} onClick={() => setTwoFactor(!twoFactor)}>
-                    {twoFactor ? "Disable" : "Enable"}
-                  </Button>
-                </div>
-                <Separator />
-                <div>
-                  <h3 className="font-medium mb-3">Active Sessions</h3>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Current session</p>
-                        <p className="text-sm text-muted-foreground">Other session management is not enabled yet.</p>
-                      </div>
-                      <Badge variant="success">Active</Badge>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Sessions</CardTitle>
+                  <CardDescription>Manage your active login sessions.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between p-3 rounded-lg border">
+                    <div>
+                      <p className="text-sm font-medium">
+                        Current session
+                        <Badge variant="secondary" className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 border-0">
+                          Active
+                        </Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground">Other session management is not enabled yet.</p>
                     </div>
                   </div>
-                </div>
-                <Separator />
-                <div className="p-4 border border-destructive/20 rounded-lg bg-destructive/5">
-                  <h3 className="font-medium text-destructive mb-2">Danger Zone</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Account deletion is not enabled yet. Workspaces can be deleted from the workspace menu when more than one workspace exists.
-                  </p>
-                  <Button variant="destructive" disabled>Delete Account</Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                  <CardDescription>Irreversible actions for your account.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Delete Account</p>
+                      <p className="text-xs text-muted-foreground">Account deletion is not enabled. Delete workspaces from the workspace menu.</p>
+                    </div>
+                    <Button variant="destructive" size="sm" disabled>
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </div>
 
       <ConfirmDialog
-        open={disconnectId !== null}
-        onOpenChange={(open) => !open && setDisconnectId(null)}
-        title={`Disconnect ${disconnectId ? platformLabels[disconnectId] : "platform"}?`}
-        description="This will stop future syncs for this platform. Existing records will stay in the workspace."
+        open={!!disconnectId}
+        onOpenChange={(o) => { if (!o) setDisconnectId(null); }}
+        title={`Disconnect ${disconnectId || ""}?`}
+        description="This will stop syncing data from this platform. You can reconnect at any time."
         confirmLabel="Disconnect"
         variant="destructive"
-        onConfirm={() => {
-          if (!disconnectId) return;
-          void handleDisconnect(disconnectId);
-        }}
+        onConfirm={() => { if (disconnectId) handleDisconnect(disconnectId); }}
       />
     </div>
   );
