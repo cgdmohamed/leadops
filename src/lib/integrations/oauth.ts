@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Platform } from '@/lib/types';
+import { ApiError } from '@/lib/server/api';
 
 type TokenResult = {
   credentials: Record<string, unknown>;
@@ -16,13 +17,13 @@ const platformLabels: Record<Platform, string> = {
 
 function appUrl(path: string) {
   const base = process.env.APP_URL;
-  if (!base) throw new Error('APP_URL is not configured');
+  if (!base) throw new ApiError(503, 'APP_URL is not configured');
   return new URL(path, base).toString();
 }
 
 function env(name: string) {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is not configured`);
+  if (!value) throw new ApiError(503, `${name} is not configured`);
   return value;
 }
 
