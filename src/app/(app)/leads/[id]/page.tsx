@@ -45,12 +45,6 @@ interface Task {
   owner: string;
 }
 
-const demoTasks: Task[] = [
-  { id: "t1", type: "call", title: "Follow-up call", dueDate: "2026-09-10", priority: "high", status: "pending", owner: "Sarah Chen" },
-  { id: "t2", type: "email", title: "Send pricing deck", dueDate: "2026-09-11", priority: "medium", status: "in_progress", owner: "James Rivera" },
-  { id: "t3", type: "meeting", title: "Demo call scheduled", dueDate: "2026-09-12", priority: "high", status: "pending", owner: "Sarah Chen" },
-];
-
 function toLead(record: ApiRecord): Lead {
   const d = record.data as Record<string, unknown>;
   const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
@@ -79,19 +73,17 @@ export default function Lead360Page() {
   const id = params.id as string;
   const [activeTab, setActiveTab] = useState("Overview");
   const [noteText, setNoteText] = useState("");
-  const [tasks, setTasks] = useState<Task[]>(demoTasks);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [showNewTask, setShowNewTask] = useState(false);
-  const [tags, setTags] = useState(["High Value", "SaaS", "Decision Maker"]);
   const [newTag, setNewTag] = useState("");
 
-  const { items: leadRecords, loading } = useRecords<Record<string, unknown>>("leads");
+  const { items: leadRecords, loading, update: updateLead } = useRecords<Record<string, unknown>>("leads");
   const { items: noteRecords, create: createNote } = useRecords<Record<string, unknown>>("notes");
+  const { items: taskRecords, create: createTask, update: updateTask } = useRecords<Record<string, unknown>>("tasks");
+  const { items: opportunityRecords } = useRecords<Record<string, unknown>>("opportunities");
 
-  const lead = useMemo(() => {
-    const record = leadRecords.find((r) => r.id === id);
-    return record ? toLead(record) : null;
-  }, [leadRecords, id]);
+  const leadRecord = useMemo(() => leadRecords.find((r) => r.id === id) ?? null, [leadRecords, id]);
+  const lead = useMemo(() => leadRecord ? toLead(leadRecord) : null, [leadRecord]);
 
   const activities = useMemo(() => {
     return noteRecords.filter((n) => (n.data as Record<string, unknown>).leadId === id)
@@ -106,6 +98,24 @@ export default function Lead360Page() {
       }))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [noteRecords, id]);
+
+  const tasks = useMemo<Task[]>(() => taskRecords
+    .filter((record) => record.data.leadId === id)
+    .map((record) => ({
+      id: record.id,
+      type: "task",
+      title: String(record.data.name ?? ""),
+      dueDate: String(record.data.dueDate ?? ""),
+      priority: "normal",
+      status: record.data.completed ? "completed" : "pending",
+      owner: "Workspace",
+    })), [taskRecords, id]);
+
+  const opportunity = useMemo(() => opportunityRecords.find((record) => record.data.leadId === id), [opportunityRecords, id]);
+  const tags = useMemo(() => {
+    const raw = leadRecords.find((record) => record.id === id)?.data.tags;
+    return Array.isArray(raw) ? raw.filter((tag): tag is string => typeof tag === "string") : [];
+  }, [leadRecords, id]);
 
   if (loading && leadRecords.length === 0) {
     return <TableSkeleton rows={4} />;
@@ -123,35 +133,36 @@ export default function Lead360Page() {
   }
 
   const daysOpen = Math.ceil((new Date().getTime() - new Date(lead.createdAt).getTime()) / 86400000);
+  const rawLead = leadRecord?.data ?? {};
+  const text = (value: unknown, fallback = "--") => typeof value === "string" && value.trim() ? value : fallback;
+  const amount = (value: unknown) => typeof value === "number" ? `$${value.toLocaleString()}` : "--";
+  const probability = typeof opportunity?.data.probability === "number" ? `${opportunity.data.probability}%` : "--";
 
   const handleAddTask = () => {
     if (!newTaskTitle.trim()) return;
-    setTasks((prev) => [...prev, {
-      id: `t${Date.now()}`,
-      type: "general",
-      title: newTaskTitle,
+    createTask({
+      leadId: id,
+      name: newTaskTitle.trim(),
       dueDate: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-      priority: "medium",
-      status: "pending",
-      owner: "Sarah Chen",
-    }]);
-    setNewTaskTitle("");
-    setShowNewTask(false);
-    toast.success("Task created");
+      completed: false,
+    }).then(() => {
+      setNewTaskTitle("");
+      setShowNewTask(false);
+      toast.success("Task created");
+    }).catch((error) => toast.error((error as Error).message));
   };
 
   const toggleTaskStatus = (taskId: string) => {
-    setTasks((prev) => prev.map((t) => {
-      if (t.id !== taskId) return t;
-      const next: TaskStatus = t.status === "completed" ? "pending" : t.status === "pending" ? "in_progress" : "completed";
-      return { ...t, status: next };
-    }));
+    const task = taskRecords.find((record) => record.id === taskId);
+    if (!task) return;
+    updateTask(taskId, { completed: !task.data.completed }).catch((error) => toast.error((error as Error).message));
   };
 
   const addTag = () => {
     if (!newTag.trim() || tags.includes(newTag)) return;
-    setTags((prev) => [...prev, newTag]);
-    setNewTag("");
+    updateLead(id, { tags: [...tags, newTag.trim()] })
+      .then(() => setNewTag(""))
+      .catch((error) => toast.error((error as Error).message));
   };
 
   return (
@@ -259,10 +270,10 @@ export default function Lead360Page() {
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Globe className="h-3.5 w-3.5" />Source</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm pt-0">
               <div className="flex justify-between"><span className="text-muted-foreground">Platform</span><PlatformBadge platform={lead.platform} /></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Source Type</span><span className="font-medium">Ad Campaign</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Source Type</span><span className="font-medium">{text(rawLead.source)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Campaign</span><span className="font-medium text-xs">{lead.campaignName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Ad Set</span><span className="font-medium">B2B Decision Makers</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Ad</span><span className="font-medium">Free Trial CTA</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Ad Set</span><span className="font-medium">{text(rawLead.adSetName)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Ad</span><span className="font-medium">{text(rawLead.adName)}</span></div>
             </CardContent>
           </Card>
         </div>
@@ -273,12 +284,12 @@ export default function Lead360Page() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><MousePointerClick className="h-3.5 w-3.5" />Attribution Details</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm pt-0">
-              <div className="flex justify-between"><span className="text-muted-foreground">Landing Page</span><span className="font-medium">/free-trial</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">UTM Source</span><span className="font-medium">{lead.platform}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">UTM Medium</span><span className="font-medium">cpc</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">UTM Campaign</span><span className="font-medium text-xs">q3_saas_launch</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">First Touch</span><span className="font-medium">Google Search</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Last Touch</span><span className="font-medium">{lead.platform} Ads</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Landing Page</span><span className="font-medium">{text(rawLead.landingPage)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">UTM Source</span><span className="font-medium">{text(rawLead.utmSource, lead.platform)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">UTM Medium</span><span className="font-medium">{text(rawLead.utmMedium)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">UTM Campaign</span><span className="font-medium text-xs">{text(rawLead.utmCampaign)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">First Touch</span><span className="font-medium">{text(rawLead.firstTouch)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Last Touch</span><span className="font-medium">{text(rawLead.lastTouch)}</span></div>
             </CardContent>
           </Card>
         </div>
@@ -319,20 +330,20 @@ export default function Lead360Page() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><DollarSign className="h-3.5 w-3.5" />Deal Information</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm pt-0">
-              <div className="flex justify-between"><span className="text-muted-foreground">Deal Name</span><span className="font-medium">{lead.name} — Deal</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pipeline</span><span className="font-medium">Sales Pipeline</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Stage</span><Badge variant="secondary" className="capitalize">{lead.status}</Badge></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Expected Value</span><span className="font-medium">$5,000</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Probability</span><span className="font-medium">{lead.status === "qualified" ? "50%" : lead.status === "contacted" ? "25%" : "10%"}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Expected Close</span><span className="font-medium">Sep 30, 2026</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Deal Name</span><span className="font-medium">{text(opportunity?.data.name, "--")}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Pipeline</span><span className="font-medium">{text(opportunity?.data.pipelineName)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Stage</span><Badge variant="secondary" className="capitalize">{text(opportunity?.data.stage, "--")}</Badge></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Expected Value</span><span className="font-medium">{amount(opportunity?.data.value)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Probability</span><span className="font-medium">{probability}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Expected Close</span><span className="font-medium">{text(opportunity?.data.expectedCloseDate)}</span></div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="h-3.5 w-3.5" />Revenue</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm pt-0">
-              <div className="flex justify-between"><span className="text-muted-foreground">Pipeline Value</span><span className="font-medium">$5,000</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Won Revenue</span><span className="font-medium">$0</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Collected</span><span className="font-medium">$0</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Pipeline Value</span><span className="font-medium">{amount(opportunity?.data.value)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Won Revenue</span><span className="font-medium">{opportunity?.data.stage === "closed_won" ? amount(opportunity.data.value) : "--"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Collected</span><span className="font-medium">{amount(opportunity?.data.collectedRevenue)}</span></div>
             </CardContent>
           </Card>
         </div>
