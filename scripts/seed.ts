@@ -10,10 +10,22 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-const SEED_ADMIN_EMAIL = (process.env.SEED_ADMIN_EMAIL ?? process.env.ADMIN_EMAIL ?? 'sarah@leadops.io').trim().toLowerCase();
-const SEED_ADMIN_NAME = (process.env.SEED_ADMIN_NAME ?? process.env.ADMIN_NAME ?? 'Sarah Chen').trim();
-const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? process.env.ADMIN_PASSWORD ?? 'password123456';
+const defaultSeedEmail = 'sarah@leadops.io';
+const defaultSeedName = 'Sarah Chen';
+const SEED_ADMIN_EMAIL = (process.env.SEED_ADMIN_EMAIL ?? process.env.ADMIN_EMAIL ?? defaultSeedEmail).trim().toLowerCase();
+const SEED_ADMIN_NAME = (process.env.SEED_ADMIN_NAME ?? process.env.ADMIN_NAME ?? defaultSeedName).trim();
+const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? process.env.ADMIN_PASSWORD ?? '';
 const SEED_WORKSPACE_NAME = (process.env.SEED_WORKSPACE_NAME ?? 'LeadOps HQ').trim();
+const usingDefaultSeedIdentity = SEED_ADMIN_EMAIL === defaultSeedEmail || SEED_ADMIN_NAME === defaultSeedName;
+
+if (process.env.NODE_ENV === 'production' && usingDefaultSeedIdentity) {
+  console.error('Refusing to seed production with demo admin identity. Set SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, and SEED_ADMIN_PASSWORD.');
+  process.exit(1);
+}
+
+if (usingDefaultSeedIdentity) {
+  console.warn('Using local demo seed identity. Set SEED_ADMIN_EMAIL and SEED_ADMIN_NAME outside local development.');
+}
 
 if (!SEED_ADMIN_EMAIL || !SEED_ADMIN_NAME || SEED_ADMIN_PASSWORD.length < 12) {
   console.error('Seed admin requires SEED_ADMIN_EMAIL, SEED_ADMIN_NAME, and SEED_ADMIN_PASSWORD with at least 12 characters');
