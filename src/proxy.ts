@@ -13,6 +13,19 @@ const PUBLIC_PATHS = [
 
 const CSRF_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline'",
+  "connect-src 'self'",
+  "form-action 'self'",
+].join("; ");
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;
   if (pathname.startsWith("/_next")) return true;
@@ -21,11 +34,26 @@ function isPublicPath(pathname: string): boolean {
   return false;
 }
 
+function secure(response: NextResponse) {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+  }
+
+  return response;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    return secure(NextResponse.next());
   }
 
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
@@ -36,7 +64,7 @@ export function proxy(request: NextRequest) {
     }
     const signInUrl = new URL("/sign-in", request.url);
     signInUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(signInUrl);
+    return secure(NextResponse.redirect(signInUrl));
   }
 
   if (CSRF_METHODS.has(request.method)) {
@@ -54,17 +82,7 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next();
-
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-
-  if (process.env.NODE_ENV === "production") {
-    response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-  }
-
-  return response;
+  return secure(NextResponse.next());
 }
 
 export const config = {
