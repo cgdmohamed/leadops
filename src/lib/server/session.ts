@@ -7,7 +7,11 @@ import type { User } from '@/lib/types';
 export const SESSION_COOKIE = 'leadops_session';
 export async function createSession(userId: string, workspaceId: string) {
   const token = newToken();
+  await db().query('DELETE FROM sessions WHERE expires_at<=now()');
   await db().query('INSERT INTO sessions(token_hash,user_id,workspace_id,expires_at) VALUES($1,$2,$3,now()+interval \'7 days\')', [tokenHash(token), userId, workspaceId]);
+  await db().query(`DELETE FROM sessions WHERE token_hash IN (
+    SELECT token_hash FROM sessions WHERE user_id=$1 ORDER BY expires_at DESC OFFSET 10
+  )`, [userId]);
   (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 604800 });
 }
 export async function readSession(): Promise<User | null> {
