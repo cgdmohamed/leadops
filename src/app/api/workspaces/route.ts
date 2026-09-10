@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { api, body, ApiError } from '@/lib/server/api';
+import { api, body, admin, ApiError } from '@/lib/server/api';
 import { db, transaction } from '@/lib/server/db';
 import { workspaceSchema } from '@/lib/server/validation';
 import { SESSION_COOKIE } from '@/lib/server/session';
@@ -27,5 +27,30 @@ export async function PATCH(request: Request) {
       AND EXISTS(SELECT 1 FROM memberships WHERE workspace_id=$1 AND user_id=$3)`, [workspaceId, tokenHash(token), user.id]);
     if (!result.rowCount) throw new ApiError(403, 'Workspace access denied');
     return { success: true };
+  });
+}
+export async function DELETE(request: Request) {
+  return api(request, async user => {
+    admin(user);
+    const { workspaceId } = z.object({ workspaceId: z.uuid() }).strict().parse(await body(request));
+    return transaction(async client => {
+      const owned = await client.query('SELECT role FROM memberships WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE', [workspaceId, user.id]);
+      if (!owned.rowCount) throw new ApiError(404, 'Workspace not found');
+      if (owned.rows[0].role !== 'admin') throw new ApiError(403, 'Administrator access required');
+
+      const remaining = await client.query(`SELECT w.id FROM workspaces w
+        JOIN memberships m ON m.workspace_id=w.id
+        WHERE m.user_id=$1 AND w.id<>$2 ORDER BY w.created_at LIMIT 1`, [user.id, workspaceId]);
+      if (!remaining.rowCount) throw new ApiError(409, 'Create or switch to another workspace before deleting this one');
+
+      await client.query('DELETE FROM workspaces WHERE id=$1', [workspaceId]);
+      if (workspaceId === user.activeWorkspace) {
+        const token = (await cookies()).get(SESSION_COOKIE)?.value;
+        if (token) {
+          await client.query('UPDATE sessions SET workspace_id=$1 WHERE token_hash=$2 AND user_id=$3', [remaining.rows[0].id, tokenHash(token), user.id]);
+        }
+      }
+      return { success: true, activeWorkspace: workspaceId === user.activeWorkspace ? remaining.rows[0].id : user.activeWorkspace };
+    });
   });
 }
