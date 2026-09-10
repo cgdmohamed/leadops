@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { api, body, admin } from '@/lib/server/api';
 import { db } from '@/lib/server/db';
 import { syncPlatform, getConnections, getSyncHistory } from '@/lib/integrations/service';
+import { encryptJson } from '@/lib/server/secret-json';
 
 const platformSchema = z.enum(['meta', 'google', 'tiktok', 'snapchat']);
 
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
       await db().query(`INSERT INTO platform_connections(workspace_id,platform,display_name,status,credentials,account_id)
         VALUES($1,$2,$3,'connected',$4,$5)
         ON CONFLICT (workspace_id,platform) DO UPDATE SET credentials=EXCLUDED.credentials,status='connected',last_error=NULL,updated_at=now()`,
-        [user.activeWorkspace, platform, platform, JSON.stringify(credentials), credentials.adAccountId ?? credentials.customerId ?? credentials.advertiserId ?? null]);
+        [user.activeWorkspace, platform, platform, JSON.stringify(encryptJson(credentials)), credentials.adAccountId ?? credentials.customerId ?? credentials.advertiserId ?? null]);
       return { success: true };
     }
 
