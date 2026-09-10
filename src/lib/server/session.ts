@@ -25,7 +25,6 @@ export async function revokeSession() {
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) await db().query('DELETE FROM sessions WHERE token_hash=$1', [tokenHash(token)]);
   jar.delete(SESSION_COOKIE);
-  jar.delete('demo_session');
 }
 export async function rateLimit(key: string, maximum = 10) {
   const { rows } = await db().query(`INSERT INTO rate_limits(key,count,expires_at) VALUES($1,1,now()+interval '15 minutes')

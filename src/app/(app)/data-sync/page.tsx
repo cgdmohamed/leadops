@@ -25,7 +25,6 @@ import {
   ScrollText,
   Settings2,
   Inbox,
-  X,
   LogOut,
 } from "lucide-react";
 import type { Platform } from "@/lib/types";
@@ -90,6 +89,9 @@ export default function DataSyncPage() {
   const [credForm, setCredForm] = useState<Record<string, string>>({});
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const connectedCount = connections.filter((connection) => connection.status === "connected").length;
+  const syncRunsToday = history.filter((entry) => entry.started_at.startsWith(new Date().toISOString().split("T")[0])).length;
+  const failedRuns = history.filter((entry) => entry.status === "failed").length;
 
   const load = useCallback(async () => {
     try {
@@ -204,6 +206,15 @@ export default function DataSyncPage() {
           Sync All
         </Button>
       </div>
+
+      {loading ? (
+        <Card>
+          <CardContent className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading sync status...
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -406,23 +417,23 @@ export default function DataSyncPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">API Calls Today</span>
-              <span className="font-medium">1,247 / 10,000</span>
+              <span className="text-muted-foreground">Sync Runs Today</span>
+              <span className="font-medium">{syncRunsToday}</span>
             </div>
             <div className="w-full bg-secondary rounded-full h-1.5">
-              <div className="bg-primary h-1.5 rounded-full" style={{ width: "12.47%" }} />
+              <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(connectedCount / platforms.length) * 100}%` }} />
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Rate Limit Window</span>
-              <span className="font-medium">60 seconds</span>
+              <span className="text-muted-foreground">Connected Platforms</span>
+              <span className="font-medium">{connectedCount} / {platforms.length}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Retry Backoff</span>
-              <span className="font-medium">Exponential (max 5m)</span>
+              <span className="text-muted-foreground">Failed Sync Runs</span>
+              <span className="font-medium">{failedRuns}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Webhook Status</span>
-              <Badge className="bg-emerald-50 text-emerald-700 text-[10px]">Active</Badge>
+              <Badge variant="outline" className="text-[10px]">Not configured</Badge>
             </div>
           </CardContent>
         </Card>

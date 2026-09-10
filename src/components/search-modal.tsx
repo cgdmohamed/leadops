@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { demoLeads, demoCampaigns } from "@/lib/data/demo";
+import { useRecords } from "@/lib/use-records";
 import { PlatformIcon } from "@/components/platform-icons";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Search, Users, Megaphone, ArrowRight } from "lucide-react";
+import type { Platform } from "@/lib/types";
 
 interface SearchModalProps {
   open: boolean;
@@ -15,6 +16,8 @@ interface SearchModalProps {
 
 export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const [query, setQuery] = useState("");
+  const { items: leadRecords } = useRecords<Record<string, unknown>>("leads");
+  const { items: campaignRecords } = useRecords<Record<string, unknown>>("campaigns");
   const router = useRouter();
 
   useEffect(() => {
@@ -33,33 +36,37 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     return () => document.removeEventListener("keydown", down);
   }, [open, onOpenChange]);
 
-  const results = query.length > 0 ? [
-    ...demoLeads
+  const q = query.trim().toLowerCase();
+  const str = (value: unknown, fallback = "") => typeof value === "string" ? value : fallback;
+  const results = q.length > 0 ? [
+    ...leadRecords
       .filter(
-        (l) =>
-          l.name.toLowerCase().includes(query.toLowerCase()) ||
-          l.email.toLowerCase().includes(query.toLowerCase()) ||
-          l.company?.toLowerCase().includes(query.toLowerCase())
+        (record) => {
+          const lead = record.data;
+          return str(lead.name).toLowerCase().includes(q) ||
+            str(lead.email).toLowerCase().includes(q) ||
+            str(lead.company).toLowerCase().includes(q);
+        }
       )
       .slice(0, 5)
-      .map((l) => ({
-        id: l.id,
+      .map((record) => ({
+        id: record.id,
         type: "lead" as const,
-        title: l.name,
-        subtitle: l.email,
-        platform: l.platform,
-        href: "/leads",
+        title: str(record.data.name, "Untitled lead"),
+        subtitle: str(record.data.email),
+        platform: str(record.data.platform, "meta") as Platform,
+        href: `/leads/${record.id}`,
       })),
-    ...demoCampaigns
-      .filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+    ...campaignRecords
+      .filter((record) => str(record.data.name).toLowerCase().includes(q))
       .slice(0, 3)
-      .map((c) => ({
-        id: c.id,
+      .map((record) => ({
+        id: record.id,
         type: "campaign" as const,
-        title: c.name,
-        subtitle: `${c.platform} · ${c.status}`,
-        platform: c.platform,
-        href: "/campaigns",
+        title: str(record.data.name, "Untitled campaign"),
+        subtitle: `${str(record.data.platform)} · ${str(record.data.status)}`,
+        platform: str(record.data.platform, "meta") as Platform,
+        href: `/campaigns/${record.id}`,
       })),
   ] : [];
 

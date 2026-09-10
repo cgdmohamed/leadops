@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = "leadops_session";
-const DEMO_COOKIE = "demo_session";
 
 const PUBLIC_PATHS = [
   "/sign-in",
@@ -30,9 +29,8 @@ export function proxy(request: NextRequest) {
   }
 
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
-  const demoToken = request.cookies.get(DEMO_COOKIE)?.value;
 
-  if (!sessionToken && !demoToken) {
+  if (!sessionToken) {
     if (pathname.startsWith("/api/")) {
       return Response.json({ error: "Authentication required" }, { status: 401 });
     }

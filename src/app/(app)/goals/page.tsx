@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRecords, type ApiRecord } from "@/lib/use-records";
+import { clientApi } from "@/lib/client-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -25,13 +25,12 @@ import {
   Flame,
   CircleDollarSign,
   Percent,
-  Phone,
   Briefcase,
   Handshake,
   Megaphone,
-  BarChart3,
   Inbox,
 } from "lucide-react";
+import type { TeamMember } from "@/lib/types";
 
 type GoalType =
   | "revenue"
@@ -92,21 +91,6 @@ const goalTypeColors: Record<GoalType, string> = {
   roas: "#14B8A6",
 };
 
-const teamMembers = ["Sarah Chen", "James Rivera", "Mike Johnson"];
-
-const weeklyProgress = [
-  { week: "W1", revenue: 22000, leads: 32, deals: 4 },
-  { week: "W2", revenue: 28000, leads: 38, deals: 5 },
-  { week: "W3", revenue: 25000, leads: 35, deals: 4 },
-  { week: "W4", revenue: 23500, leads: 37, deals: 5 },
-];
-
-const teamGoals = [
-  { name: "Sarah Chen", revenue: 45000, target: 50000, deals: 8, targetDeals: 10 },
-  { name: "James Rivera", revenue: 32000, target: 40000, deals: 5, targetDeals: 8 },
-  { name: "Mike Johnson", revenue: 21500, target: 30000, deals: 5, targetDeals: 6 },
-];
-
 function monthEndDate(period: string): string {
   const parsed = new Date(`${period} 1`);
   if (Number.isNaN(parsed.getTime())) return new Date().toISOString().split("T")[0];
@@ -161,7 +145,7 @@ export default function GoalsPage() {
   const { items: goalRecords, create } = useRecords<Record<string, unknown>>("goals");
   const goals = useMemo(() => goalRecords.map((record) => toGoal(record)), [goalRecords]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [chartMetric, setChartMetric] = useState<"revenue" | "leads" | "deals">("revenue");
+  const [teamMembers, setTeamMembers] = useState<string[]>([]);
 
   const [newGoal, setNewGoal] = useState({
     type: "revenue" as GoalType,
@@ -169,6 +153,36 @@ export default function GoalsPage() {
     period: "Sep 2026",
     assignedTo: "",
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    clientApi<TeamMember[]>("/api/team")
+      .then((members) => {
+        if (!cancelled) setTeamMembers(members.map((member) => member.name));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const goalProgress = useMemo(() => goals.map((goal) => ({
+    name: goal.name,
+    progress: goal.target > 0 ? Math.min(Math.round((goal.current / goal.target) * 100), 100) : 0,
+    current: goal.current,
+    target: goal.target,
+  })).slice(0, 8), [goals]);
+
+  const teamPerformance = useMemo(() => {
+    const map = new Map<string, { name: string; current: number; target: number; goals: number }>();
+    goals.forEach((goal) => {
+      if (!goal.assignedTo) return;
+      const existing = map.get(goal.assignedTo) ?? { name: goal.assignedTo, current: 0, target: 0, goals: 0 };
+      existing.current += goal.current;
+      existing.target += goal.target;
+      existing.goals += 1;
+      map.set(goal.assignedTo, existing);
+    });
+    return Array.from(map.values());
+  }, [goals]);
 
   const handleCreateGoal = async () => {
     if (!newGoal.target || Number(newGoal.target) <= 0) return;
@@ -256,33 +270,27 @@ export default function GoalsPage() {
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Weekly Progress</CardTitle>
-            <Tabs
-              value={chartMetric}
-              onValueChange={(v: string | null) => v && setChartMetric(v as "revenue" | "leads" | "deals")}
-            >
-              <TabsList variant="line" className="mt-2">
-                <TabsTrigger value="revenue">Revenue</TabsTrigger>
-                <TabsTrigger value="leads">Leads</TabsTrigger>
-                <TabsTrigger value="deals">Deals</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <CardTitle className="text-base">Goal Progress</CardTitle>
+            <CardDescription>Progress based on saved goals.</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={weeklyProgress}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(value, name) => [
-                    chartMetric === "revenue" ? `$${Number(value).toLocaleString()}` : Number(value).toLocaleString(),
-                    chartMetric.charAt(0).toUpperCase() + chartMetric.slice(1),
-                  ]}
-                />
-                <Bar dataKey={chartMetric} fill="#3B82F6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {goalProgress.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[250px] text-center text-muted-foreground">
+                <Inbox className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm font-medium">No goal progress yet</p>
+                <p className="text-xs mt-1">Create goals to see progress here.</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={goalProgress}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
+                  <Tooltip formatter={(value) => [`${Number(value).toLocaleString()}%`, "Progress"]} />
+                  <Bar dataKey="progress" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -292,39 +300,32 @@ export default function GoalsPage() {
             <CardDescription>Individual progress toward personal targets</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {teamGoals.map((member) => {
-              const revProgress = (member.revenue / member.target) * 100;
-              const dealProgress = (member.deals / member.targetDeals) * 100;
+            {teamPerformance.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                <Inbox className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm font-medium">No assigned goals yet</p>
+                <p className="text-xs mt-1">Assign goals to team members to compare progress.</p>
+              </div>
+            ) : teamPerformance.map((member) => {
+              const progress = member.target > 0 ? Math.min((member.current / member.target) * 100, 100) : 0;
               return (
                 <div key={member.name} className="p-3 rounded-lg border">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium">{member.name}</span>
                     <Badge
-                      variant={revProgress >= 80 ? "secondary" : "destructive"}
+                      variant={progress >= 80 ? "secondary" : "destructive"}
                       className="text-[10px]"
                     >
-                      {revProgress >= 80 ? "On Track" : "Behind"}
+                      {progress >= 80 ? "On Track" : "Behind"}
                     </Badge>
                   </div>
                   <div className="space-y-2">
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground">Revenue</span>
-                        <span>
-                          ${(member.revenue / 1000).toFixed(1)}K / $
-                          {(member.target / 1000).toFixed(0)}K
-                        </span>
+                        <span className="text-muted-foreground">{member.goals} goal{member.goals === 1 ? "" : "s"}</span>
+                        <span>{progress.toFixed(0)}%</span>
                       </div>
-                      <Progress value={revProgress} className="h-1.5" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-muted-foreground">Deals</span>
-                        <span>
-                          {member.deals} / {member.targetDeals}
-                        </span>
-                      </div>
-                      <Progress value={dealProgress} className="h-1.5" />
+                      <Progress value={progress} className="h-1.5" />
                     </div>
                   </div>
                 </div>
