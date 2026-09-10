@@ -12,11 +12,11 @@ export async function GET(request: Request) {
     const isAdmin = user.role === 'admin';
 
     const [campaignRows, leadRows, oppRows] = await Promise.all([
-      db().query('SELECT data, created_at FROM records WHERE workspace_id=$1 AND kind=\'campaigns\'', [workspaceId]),
+      db().query('SELECT id, data, created_at FROM records WHERE workspace_id=$1 AND kind=\'campaigns\'', [workspaceId]),
       db().query(`SELECT data, created_at, updated_at FROM records WHERE workspace_id=$1 AND kind='leads'${isAdmin ? '' : ' AND owner_id=$2'}`, isAdmin ? [workspaceId] : [workspaceId, user.id]),
       db().query(`SELECT data, created_at, updated_at FROM records WHERE workspace_id=$1 AND kind='opportunities'${isAdmin ? '' : ' AND owner_id=$2'}`, isAdmin ? [workspaceId] : [workspaceId, user.id]),
     ]);
-    const campaigns = campaignRows.rows.map(r => ({ data: r.data as Record<string, unknown>, createdAt: r.created_at as Date }));
+    const campaigns = campaignRows.rows.map(r => ({ id: r.id as string, data: r.data as Record<string, unknown>, createdAt: r.created_at as Date }));
     const leads = leadRows.rows.map(r => ({ data: r.data as Record<string, unknown>, createdAt: r.created_at as Date, updatedAt: r.updated_at as Date }));
     const opportunities = oppRows.rows.map(r => ({ data: r.data as Record<string, unknown>, createdAt: r.created_at as Date, updatedAt: r.updated_at as Date }));
 
@@ -126,7 +126,7 @@ export async function GET(request: Request) {
         value: opportunities.filter(o => o.data.stage === stage).reduce((s, o) => s + num(o.data.value), 0),
       })),
       topCampaigns: campaigns
-        .map(c => ({ id: str(c.data.id), name: str(c.data.name), platform: str(c.data.platform) as Platform, spend: num(c.data.spend), leads: num(c.data.leads), costPerLead: num(c.data.costPerLead), revenue: num(c.data.wonRevenue), roas: num(c.data.spend) ? num(c.data.wonRevenue) / num(c.data.spend) : 0 }))
+        .map(c => ({ id: c.id, name: str(c.data.name), platform: str(c.data.platform) as Platform, spend: num(c.data.spend), leads: num(c.data.leads), costPerLead: num(c.data.costPerLead), revenue: num(c.data.wonRevenue), roas: num(c.data.spend) ? num(c.data.wonRevenue) / num(c.data.spend) : 0 }))
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 6),
       leadStatusCounts: LEAD_STATUSES.map(status => ({ status, count: leads.filter(l => l.data.status === status).length })),
