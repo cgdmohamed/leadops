@@ -21,9 +21,14 @@ export async function POST(request: Request) {
     if (!await rateLimit(`invite:${user.activeWorkspace}`, 30)) throw new ApiError(429, 'Too many invitations');
     const token = newToken();
     await db().query('INSERT INTO account_tokens(token_hash,purpose,email,workspace_id,role,expires_at) VALUES($1,\'invite\',$2,$3,$4,now()+interval \'7 days\')', [tokenHash(token),input.email,user.activeWorkspace,input.role]);
-    try { await sendAccountMail(input.email, 'invite', token); }
-    catch { await db().query('DELETE FROM account_tokens WHERE token_hash=$1', [tokenHash(token)]); throw new ApiError(503, 'Invitation email could not be sent'); }
-    return { success: true };
+    const inviteUrl = new URL('/accept-invite', process.env.APP_URL ?? request.url);
+    inviteUrl.hash = new URLSearchParams({ token }).toString();
+    try {
+      await sendAccountMail(input.email, 'invite', token);
+      return { success: true, emailSent: true };
+    } catch {
+      return { success: true, emailSent: false, inviteLink: inviteUrl.toString() };
+    }
   });
 }
 export async function PATCH(request: Request) {

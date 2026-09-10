@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Shield, User, MoreHorizontal, Edit2, Trash2, Mail } from "lucide-react";
+import { UserPlus, Shield, User, Edit2, Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
 import type { TeamMember } from "@/lib/types";
 
@@ -40,22 +40,24 @@ export default function TeamPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<string | null>(null);
-  const [newMember, setNewMember] = useState<{ name: string; email: string; role: "admin" | "agent" }>({ name: "", email: "", role: "agent" });
+  const [newMember, setNewMember] = useState<{ email: string; role: "admin" | "agent" }>({ email: "", role: "agent" });
 
   useEffect(() => {
     clientApi<TeamMember[]>("/api/team").then(setMembers).catch((e) => toast.error(e.message)).finally(() => setLoading(false));
   }, []);
 
   const handleInvite = async () => {
-    if (!newMember.name || !newMember.email) {
-      toast.error("Please fill in all fields");
+    if (!newMember.email) {
+      toast.error("Please enter an email address");
       return;
     }
     try {
-      await clientApi("/api/team", { method: "POST", body: JSON.stringify({ email: newMember.email, role: newMember.role }) });
-      toast.success(`Invitation sent to ${newMember.email}`, { description: `Role: ${newMember.role}` });
+      const result = await clientApi<{ emailSent?: boolean; inviteLink?: string }>("/api/team", { method: "POST", body: JSON.stringify({ email: newMember.email, role: newMember.role }) });
+      toast.success(result.emailSent === false ? `Invite link created for ${newMember.email}` : `Invitation sent to ${newMember.email}`, {
+        description: result.inviteLink ?? `Role: ${newMember.role}`,
+      });
       setInviteOpen(false);
-      setNewMember({ name: "", email: "", role: "agent" });
+      setNewMember({ email: "", role: "agent" });
     } catch (e) { toast.error((e as Error).message); }
   };
 
@@ -134,7 +136,19 @@ export default function TeamPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {members.map((member) => (
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                    Loading team members...
+                  </TableCell>
+                </TableRow>
+              ) : members.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                    No team members found.
+                  </TableCell>
+                </TableRow>
+              ) : members.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -213,14 +227,6 @@ export default function TeamPage() {
             <DialogTitle>Invite Member</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input
-                placeholder="Full name"
-                value={newMember.name}
-                onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
-              />
-            </div>
             <div className="space-y-2">
               <Label>Email</Label>
               <Input

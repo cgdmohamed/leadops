@@ -67,7 +67,7 @@ const sections = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "roles", label: "Roles & Permissions", icon: Key },
   { id: "revenue", label: "Revenue Definitions", icon: DollarSign },
-  { id: "currency", label: "Currency & Workspace", icon: Globe },
+  { id: "currency", label: "Workspace", icon: Globe },
   { id: "audit", label: "Audit Log", icon: History },
   { id: "security", label: "Security", icon: Shield },
 ];
@@ -90,6 +90,9 @@ export default function SettingsPage() {
     status: "disconnected",
   })));
   const [disconnectId, setDisconnectId] = useState<Platform | null>(null);
+  const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"admin" | "agent">("agent");
   const [twoFactor, setTwoFactor] = useState(false);
   const roleCounts = useMemo(() => ({
     admin: teamMembers.filter((member) => member.role === "admin").length,
@@ -240,6 +243,51 @@ export default function SettingsPage() {
       toast.error((error as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleInviteMember = async () => {
+    if (!inviteEmail.trim()) {
+      toast.error("Enter an email address");
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await clientApi<{ emailSent?: boolean; inviteLink?: string }>("/api/team", {
+        method: "POST",
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      setInviteEmail("");
+      setInviteRole("agent");
+      toast.success(result.emailSent === false ? "Invite link created" : "Invitation sent", {
+        description: result.inviteLink ?? undefined,
+      });
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateMemberRole = async (id: string, role: "admin" | "agent") => {
+    try {
+      await clientApi("/api/team", { method: "PATCH", body: JSON.stringify({ id, role }) });
+      setTeamMembers((prev) => prev.map((member) => member.id === id ? { ...member, role } : member));
+      toast.success("Role updated");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!removeMemberId) return;
+    try {
+      await clientApi("/api/team", { method: "DELETE", body: JSON.stringify({ id: removeMemberId }) });
+      setTeamMembers((prev) => prev.filter((member) => member.id !== removeMemberId));
+      setRemoveMemberId(null);
+      toast.success("Member removed");
+    } catch (error) {
+      toast.error((error as Error).message);
     }
   };
 
@@ -688,15 +736,8 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Roles & Permissions</CardTitle>
-                      <CardDescription>Manage team roles and access levels.</CardDescription>
-                    </div>
-                    <Button size="sm" variant="outline">
-                      <Key className="h-3.5 w-3.5 mr-1" /> Create Custom Role
-                    </Button>
-                  </div>
+                  <CardTitle>Roles & Permissions</CardTitle>
+                  <CardDescription>View the fixed access levels available in this workspace.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {[
@@ -712,9 +753,6 @@ export default function SettingsPage() {
                             <p className="text-[10px] text-muted-foreground">{item.members} members</p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => toast.success(`Edit ${item.role} permissions`)}>
-                          <Edit2 className="h-3 w-3 mr-1" /> Edit
-                        </Button>
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2">
                         {item.permissions.map((p) => (
@@ -729,13 +767,33 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Team Members</CardTitle>
-                  <CardDescription>Assign roles to team members.</CardDescription>
+                  <CardDescription>Invite users, change roles, or remove access from this workspace.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
+                    <Input
+                      type="email"
+                      placeholder="member@company.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                    />
+                    <select
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value as "admin" | "agent")}
+                    >
+                      <option value="agent">Agent</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <Button size="sm" onClick={handleInviteMember} disabled={saving || !inviteEmail.trim()}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Invite
+                    </Button>
+                  </div>
+                  <Separator />
                   {teamMembers.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No team members found.</p>
                   ) : teamMembers.map((member) => (
-                    <div key={member.email} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50">
+                    <div key={member.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="text-xs">
@@ -747,7 +805,26 @@ export default function SettingsPage() {
                           <p className="text-xs text-muted-foreground">{member.email}</p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="text-[10px] capitalize">{member.role}</Badge>
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="h-8 rounded-md border bg-background px-2 text-xs capitalize"
+                          value={member.role}
+                          disabled={member.id === me?.id && roleCounts.admin <= 1}
+                          onChange={(e) => handleUpdateMemberRole(member.id, e.target.value as "admin" | "agent")}
+                        >
+                          <option value="agent">Agent</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          disabled={member.id === me?.id}
+                          onClick={() => setRemoveMemberId(member.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </CardContent>
@@ -803,10 +880,17 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Currency & Workspace</CardTitle>
-                  <CardDescription>Set your workspace currency and regional preferences.</CardDescription>
+                  <CardTitle>Workspace Settings</CardTitle>
+                  <CardDescription>Rename the workspace and set regional reporting preferences.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Workspace Name</Label>
+                    <Input
+                      value={workspace?.name ?? ""}
+                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label>Default Currency</Label>
                     <Input
@@ -815,14 +899,6 @@ export default function SettingsPage() {
                       onChange={(e) => setWorkspace((prev) => prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev)}
                     />
                     <p className="text-xs text-muted-foreground">e.g., USD, EUR, GBP</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Date Format</Label>
-                    <select className="w-full h-9 rounded-md border bg-background px-3 text-sm">
-                      <option>MM/DD/YYYY</option>
-                      <option>DD/MM/YYYY</option>
-                      <option>YYYY-MM-DD</option>
-                    </select>
                   </div>
                   <div className="space-y-2">
                     <Label>Timezone</Label>
@@ -837,13 +913,6 @@ export default function SettingsPage() {
                       <option value="Europe/London">Europe/London</option>
                       <option value="America/New_York">America/New_York</option>
                     </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Workspace Name</Label>
-                    <Input
-                      value={workspace?.name ?? ""}
-                      onChange={(e) => setWorkspace((prev) => prev ? { ...prev, name: e.target.value } : prev)}
-                    />
                   </div>
                   <div className="flex justify-end">
                     <Button onClick={handleSaveWorkspace} disabled={saving || !workspace}>Save</Button>
@@ -947,6 +1016,16 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!removeMemberId}
+        onOpenChange={(o) => { if (!o) setRemoveMemberId(null); }}
+        title="Remove team member"
+        description={`Remove ${teamMembers.find((member) => member.id === removeMemberId)?.name ?? "this member"} from this workspace? Their assigned records will be reassigned to you.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={handleRemoveMember}
+      />
 
       <ConfirmDialog
         open={!!disconnectId}

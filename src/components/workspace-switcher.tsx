@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronsUpDown, Building2, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, Building2, Plus, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -23,16 +23,19 @@ interface WorkspaceSwitcherProps {
   activeWorkspace: string;
   onSwitch: (id: string) => void;
   onAdd?: (workspace: Workspace) => void | Promise<void>;
+  onUpdate?: (workspace: Workspace) => void | Promise<void>;
   onDelete?: (id: string) => void | Promise<void>;
   collapsed?: boolean;
 }
 
-export function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onAdd, onDelete, collapsed }: WorkspaceSwitcherProps) {
+export function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onAdd, onUpdate, onDelete, collapsed }: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [newWorkspace, setNewWorkspace] = useState({ name: "", currency: "USD" });
+  const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
   const active = workspaces.find((w) => w.id === activeWorkspace);
   const deleting = workspaces.find((w) => w.id === deleteId);
 
@@ -48,6 +51,29 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onAdd
       setAddOpen(false);
       setNewWorkspace({ name: "", currency: "USD" });
       toast.success("Workspace created");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (saving || !editingWorkspace || !onUpdate) return;
+    if (!editingWorkspace.name.trim()) {
+      toast.error("Please enter a workspace name");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onUpdate({
+        ...editingWorkspace,
+        name: editingWorkspace.name.trim(),
+        currency: editingWorkspace.currency.trim().toUpperCase() || "USD",
+        timezone: editingWorkspace.timezone || "UTC",
+      });
+      setEditOpen(false);
+      toast.success("Workspace updated");
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
@@ -85,6 +111,20 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onAdd
               <p className="text-[10px] text-muted-foreground">{ws.currency}</p>
             </div>
           </button>
+          {onUpdate && ws.id === activeWorkspace && (
+            <button
+              className="rounded p-1 text-muted-foreground hover:text-foreground"
+              title="Edit workspace"
+              onClick={(event) => {
+                event.stopPropagation();
+                setEditingWorkspace({ ...ws, timezone: ws.timezone || "UTC" });
+                setOpen(false);
+                setEditOpen(true);
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
           {onDelete && workspaces.length > 1 && (
             <button
               className="mr-1 rounded p-1 text-muted-foreground hover:text-destructive"
@@ -169,6 +209,50 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace, onSwitch, onAdd
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
             <Button onClick={handleAdd} disabled={saving}>{saving ? "Creating..." : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Workspace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                placeholder="Workspace name"
+                value={editingWorkspace?.name ?? ""}
+                onChange={(e) => setEditingWorkspace((prev) => prev ? { ...prev, name: e.target.value } : prev)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Currency</Label>
+              <Input
+                placeholder="USD"
+                value={editingWorkspace?.currency ?? ""}
+                onChange={(e) => setEditingWorkspace((prev) => prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Timezone</Label>
+              <select
+                className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                value={editingWorkspace?.timezone ?? "UTC"}
+                onChange={(e) => setEditingWorkspace((prev) => prev ? { ...prev, timezone: e.target.value } : prev)}
+              >
+                <option value="UTC">UTC</option>
+                <option value="Africa/Cairo">Africa/Cairo</option>
+                <option value="Asia/Riyadh">Asia/Riyadh</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="America/New_York">America/New_York</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdate} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

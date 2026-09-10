@@ -141,6 +141,10 @@ export function Sidebar({ user, workspaces }: SidebarProps) {
             await clientApi('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: ws.name, currency: ws.currency, timezone: ws.timezone || 'UTC' }) });
             router.refresh();
           }}
+          onUpdate={async (ws) => {
+            await clientApi('/api/settings', { method: 'PATCH', body: JSON.stringify({ name: ws.name, currency: ws.currency, timezone: ws.timezone || 'UTC' }) });
+            window.location.reload();
+          }}
           onDelete={async (id) => {
             await clientApi('/api/workspaces', { method: 'DELETE', body: JSON.stringify({ workspaceId: id }) });
             window.location.reload();
