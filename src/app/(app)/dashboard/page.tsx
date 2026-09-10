@@ -213,18 +213,15 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {visibleKpis.slice(0, 4).map((key) => {
             const { label, format } = kpiLabels[key];
-            const value = kpis[key as keyof typeof kpis] as number;
+            const value = kpis[key as keyof typeof kpis];
             return (
               <Card key={key} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/pipeline")}>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                  <p className="text-2xl font-bold font-mono">{format(value)}</p>
-                  <div className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground">
-                    <span>No comparison data</span>
-                  </div>
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                  <p className="text-xl font-bold mt-0.5">{format(value as number)}</p>
                 </CardContent>
               </Card>
             );
@@ -232,130 +229,236 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Row 2: Growth Funnel + Revenue Trend */}
+      {/* Row 2: Revenue by Platform, Revenue Trend, Growth Funnel */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2 cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/attribution")}>
+        {/* Revenue by Platform */}
+        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/attribution")}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Growth Funnel</CardTitle>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <CardTitle className="text-sm">Revenue by Platform</CardTitle>
+              <div className="flex gap-1">
+                {platformMetrics.map((m) => (
+                  <button
+                    key={m}
+                    onClick={(e) => { e.stopPropagation(); setPlatformMetric(m); }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      platformMetric === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {m === "wonDeals" ? "Won" : m.charAt(0).toUpperCase() + m.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-1 h-[180px] items-end">
-              {funnelStages.map((stage, i) => {
-                const maxRaw = Math.max(...funnelStages.map((s) => s.raw), 1);
-                const height = Math.max(20, (stage.raw / maxRaw) * 140);
-                return (
-                  <div key={stage.label} className="flex flex-col items-center gap-2">
-                    <div className="text-center">
-                      <p className="text-sm font-bold font-mono">{stage.value}</p>
-                      <p className="text-[10px] text-muted-foreground">{stage.label}</p>
+            <div className="flex items-center gap-4">
+              <div className="h-[140px] w-[140px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={platformChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={60}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {platformChartData.map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v) => [platformMetric === "revenue" || platformMetric === "spend" ? `$${Number(v).toLocaleString()}` : Number(v).toLocaleString(), platformMetric]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {platformData.map((p, i) => (
+                  <div key={p.platform} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />
+                      <PlatformIcon platform={p.platform} className="h-3 w-3 text-muted-foreground" />
+                      <span className="capitalize">{p.platform}</span>
                     </div>
-                    <div
-                      className="w-full rounded-t-md bg-gradient-to-t from-primary to-primary/60 transition-all hover:from-primary/80 hover:to-primary/40"
-                      style={{ height: `${height}px` }}
-                    />
+                    <span className="font-medium">
+                      {platformMetric === "revenue" || platformMetric === "spend"
+                        ? `$${((platformMetric === "revenue" ? p.revenue : p.spend) / 1000).toFixed(0)}K`
+                        : (platformMetric === "leads" ? p.leads : p.wonDeals)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Revenue Trend */}
+        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/attribution")}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Revenue Trend</CardTitle>
+              <div className="flex gap-1">
+                {trendMetrics.map((m) => (
+                  <button
+                    key={m}
+                    onClick={(e) => { e.stopPropagation(); setTrendMetric(m); }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      trendMetric === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {m === "wonDeals" ? "Won" : m.charAt(0).toUpperCase() + m.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[160px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendData}>
+                  <defs>
+                    <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.1} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 9 }}
+                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 9 }}
+                    tickFormatter={(v) => trendMetric === "revenue" || trendMetric === "spend" ? `$${(v / 1000).toFixed(0)}K` : v}
+                    width={40}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    formatter={(v) => [
+                      trendMetric === "revenue" || trendMetric === "spend" ? `$${Number(v).toLocaleString()}` : Number(v).toLocaleString(),
+                      trendMetric.charAt(0).toUpperCase() + trendMetric.slice(1),
+                    ]}
+                  />
+                  <Area type="monotone" dataKey={trendMetric === "wonDeals" ? "value" : trendMetric} stroke="#2563EB" strokeWidth={1.5} fill="url(#trendFill)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Growth Funnel */}
+        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/pipeline/analytics")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Growth Funnel</CardTitle>
+          </CardHeader>
+          <CardContent className="py-2">
+            <div className="space-y-0">
+              {funnelStages.map((stage, i) => {
+                const isLast = i === funnelStages.length - 1;
+                const prevRaw = i > 0 ? funnelStages[i - 1].raw : null;
+                const convRate = prevRaw && prevRaw > 0 ? ((stage.raw / prevRaw) * 100).toFixed(1) : null;
+                const isReverse = stage.label === "Spend" || stage.label === "Traffic";
+                return (
+                  <div key={stage.label}>
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-[11px] text-muted-foreground">{stage.label}</span>
+                      <span className="text-xs font-semibold">{stage.value}</span>
+                    </div>
+                    {!isLast && (
+                      <div className="flex items-center gap-2 pl-2">
+                        <div className="h-3 w-px bg-border" />
+                        {convRate && (
+                          <span className="text-[9px] text-muted-foreground">
+                            {isReverse ? `${(100 - parseFloat(convRate)).toFixed(1)}% drop` : `${convRate}% conv`}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </CardContent>
         </Card>
-
-        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/attribution")}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Revenue Trend</CardTitle>
-              <div className="flex gap-0.5">
-                {trendMetrics.map((m) => (
-                  <button
-                    key={m}
-                    onClick={(e) => { e.stopPropagation(); setTrendMetric(m); }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] ${trendMetric === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-                  >
-                    {m === "wonDeals" ? "Won" : m.charAt(0).toUpperCase() + m.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData}>
-                <defs>
-                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip />
-                <Area type="monotone" dataKey={trendMetric === "revenue" ? "revenue" : "value"} stroke="#2563EB" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Row 3: Platform Performance + Pipeline */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Row 3: Top Campaigns, Pipeline Value, Deals by Stage */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Top Campaigns */}
         <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/campaigns")}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Platform Performance</CardTitle>
-              <div className="flex gap-0.5">
-                {platformMetrics.map((m) => (
-                  <button
-                    key={m}
-                    onClick={(e) => { e.stopPropagation(); setPlatformMetric(m); }}
-                    className={`px-1.5 py-0.5 rounded text-[10px] ${platformMetric === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
-                  >
-                    {m === "wonDeals" ? "Won" : m.charAt(0).toUpperCase() + m.slice(1)}
-                  </button>
-                ))}
-              </div>
+              <CardTitle className="text-sm">Top Campaigns</CardTitle>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
           </CardHeader>
-          <CardContent className="h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={platformChartData}
-                  dataKey="value"
-                  nameKey="platform"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={4}
-                >
-                  {platformChartData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          <CardContent className="space-y-2">
+            {topCampaigns.slice(0, 5).map((c) => (
+              <div key={c.id} className="flex items-center justify-between py-1">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate">{c.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <PlatformIcon platform={c.platform} className="h-2.5 w-2.5 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground">${c.spend.toLocaleString()} spend</span>
+                  </div>
+                </div>
+                <div className="text-right ml-3">
+                  <p className="text-xs font-medium">${c.revenue.toLocaleString()}</p>
+                  <p className="text-[10px] text-muted-foreground">{c.roas}x ROAS</p>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/pipeline") }>
+        {/* Pipeline Value */}
+        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/pipeline")}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Pipeline Health</CardTitle>
-              <Badge variant="secondary" className="text-[10px]">${(pipelineValue / 1000).toFixed(0)}K weighted</Badge>
+              <CardTitle className="text-sm">Pipeline Value</CardTitle>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {dealsByStage.map((stage) => (
-              <div key={stage.name} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span>{stage.name}</span>
-                  <span className="font-mono font-medium">{stage.count}</span>
+          <CardContent>
+            <p className="text-2xl font-bold">${(pipelineValue / 1000).toFixed(0)}K</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Total value across all pipeline stages</p>
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="text-center p-2 rounded-lg bg-muted/50">
+                <p className="text-sm font-bold">{kpis.opportunities}</p>
+                <p className="text-[9px] text-muted-foreground">Open Opps</p>
+              </div>
+              <div className="text-center p-2 rounded-lg bg-muted/50">
+                <p className="text-sm font-bold">{kpis.wonDeals}</p>
+                <p className="text-[9px] text-muted-foreground">Won</p>
+              </div>
+              <div className="text-center p-2 rounded-lg bg-muted/50">
+                <p className="text-sm font-bold">{kpis.qualifiedLeads}</p>
+                <p className="text-[9px] text-muted-foreground">Qualified</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Deals by Stage */}
+        <Card className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => router.push("/pipeline/analytics")}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Sales Pipeline</CardTitle>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {dealsByStage.slice(0, 6).map((stage) => (
+              <div key={stage.name}>
+                <div className="flex items-center justify-between text-xs mb-0.5">
+                  <span className="text-muted-foreground">{stage.name}</span>
+                  <span className="font-medium">{stage.count}</span>
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
