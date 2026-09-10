@@ -58,7 +58,7 @@ export default function SignInPage() {
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
-                  placeholder="Sarah Chen"
+                placeholder="Admin User"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -70,7 +70,7 @@ export default function SignInPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="sarah@leadops.io"
+                placeholder="admin@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
