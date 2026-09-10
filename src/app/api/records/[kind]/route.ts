@@ -21,7 +21,7 @@ export async function POST(request: Request, context: Context) {
     const kind = kindSchema.parse((await context.params).kind);
     if (['campaigns','assignment-rules'].includes(kind)) admin(user);
     const input = recordInput.parse(await body(request));
-    const data = schemas[kind].strict().parse(input.data);
+    const data = schemas[kind].passthrough().parse(input.data);
     const owner = user.role === 'admin' ? input.ownerId ?? user.id : user.id;
     return transaction(async client => {
       for (const [field, relatedKind] of [['leadId','leads'],['campaignId','campaigns']] as const) {
@@ -29,7 +29,8 @@ export async function POST(request: Request, context: Context) {
         if (id && !(await client.query('SELECT 1 FROM records WHERE workspace_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR owner_id=$5)', [user.activeWorkspace, relatedKind, id, user.role === 'admin', user.id])).rowCount) throw new ApiError(400, `Invalid ${field}`);
       }
       if (!(await client.query('SELECT 1 FROM memberships WHERE workspace_id=$1 AND user_id=$2', [user.activeWorkspace, owner])).rowCount) throw new ApiError(400, 'Invalid owner');
-      const { rows } = await client.query('INSERT INTO records(workspace_id,kind,owner_id,data) VALUES($1,$2,$3,$4) RETURNING id,data,version', [user.activeWorkspace, kind, owner, JSON.stringify(data)]);
+      const { rows } = await client.query(`INSERT INTO records(workspace_id,kind,owner_id,data) VALUES($1,$2,$3,$4)
+        RETURNING id,data,owner_id AS "ownerId",version,created_at AS "createdAt",updated_at AS "updatedAt"`, [user.activeWorkspace, kind, owner, JSON.stringify(data)]);
       await client.query('INSERT INTO audit_events(workspace_id,actor_id,action,entity_id) VALUES($1,$2,$3,$4)', [user.activeWorkspace, user.id, `${kind}.created`, rows[0].id]);
       return rows[0];
     });
