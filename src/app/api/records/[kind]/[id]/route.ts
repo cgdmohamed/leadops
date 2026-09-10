@@ -19,18 +19,20 @@ export async function PUT(request: Request, context: Context) {
     const id = z.uuid().parse(params.id);
     if (['campaigns','assignment-rules'].includes(kind)) admin(user);
     const input = recordInput.extend({ version: z.number().int().positive() }).parse(await body(request));
-    const data = schemas[kind].strict().parse(input.data);
     return transaction(async client => {
       const current = await client.query('SELECT * FROM records WHERE workspace_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR owner_id=$5) FOR UPDATE', [user.activeWorkspace, kind, id, user.role === 'admin', user.id]);
       if (!current.rowCount) throw new ApiError(404, 'Record not found');
       if (current.rows[0].version !== input.version) throw new ApiError(409, 'Record changed. Reload and retry.');
+      const patch = input.data && typeof input.data === 'object' && !Array.isArray(input.data) ? input.data as Record<string, unknown> : {};
+      const data = schemas[kind].passthrough().parse({ ...current.rows[0].data, ...patch });
       const owner = user.role === 'admin' && input.ownerId !== undefined ? input.ownerId : current.rows[0].owner_id;
       if (owner && !(await client.query('SELECT 1 FROM memberships WHERE workspace_id=$1 AND user_id=$2', [user.activeWorkspace, owner])).rowCount) throw new ApiError(400, 'Invalid owner');
       for (const [field, relatedKind] of [['leadId','leads'],['campaignId','campaigns']] as const) {
         const relatedId = (data as Record<string, unknown>)[field];
         if (relatedId && !(await client.query('SELECT 1 FROM records WHERE workspace_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR owner_id=$5)', [user.activeWorkspace, relatedKind, relatedId, user.role === 'admin', user.id])).rowCount) throw new ApiError(400, `Invalid ${field}`);
       }
-      const result = await client.query('UPDATE records SET data=$1,owner_id=$2,version=version+1,updated_at=now() WHERE id=$3 RETURNING id,data,version', [JSON.stringify(data), owner, id]);
+      const result = await client.query(`UPDATE records SET data=$1,owner_id=$2,version=version+1,updated_at=now() WHERE id=$3
+        RETURNING id,data,owner_id AS "ownerId",version,created_at AS "createdAt",updated_at AS "updatedAt"`, [JSON.stringify(data), owner, id]);
       await client.query('INSERT INTO audit_events(workspace_id,actor_id,action,entity_id) VALUES($1,$2,$3,$4)', [user.activeWorkspace, user.id, `${kind}.updated`, id]);
       return result.rows[0];
     });
