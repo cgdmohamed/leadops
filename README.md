@@ -40,6 +40,10 @@ Fill in `.env`:
 | `APP_URL` | Yes | Public origin of the app, e.g. `http://localhost:3000` |
 | `SESSION_SECRET` | Recommended | Random string; used for token hashing |
 | `ALLOW_SIGNUP` | No | Set `true` to enable public sign-up (default `false`) |
+| `SEED_ADMIN_EMAIL` | For seed | Admin email created/updated by `npm run db:seed` |
+| `SEED_ADMIN_PASSWORD` | For seed | Admin password for `npm run db:seed` (minimum 12 characters) |
+| `SEED_ADMIN_NAME` | For seed | Admin display name for `npm run db:seed` |
+| `SEED_WORKSPACE_NAME` | For seed | Primary workspace name created by `npm run db:seed` |
 | `SMTP_URL`, `MAIL_FROM` | For mail | SMTP connection string and sender address (password reset / invites) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_DEVELOPER_TOKEN` | For Google sync | Google Ads OAuth credentials |
 
@@ -50,7 +54,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-Seed users (password `password123456`): `sarah@leadops.io` (admin), `james@leadops.io`, `mike@leadops.io`. Workspaces: LeadOps HQ (USD), EU Branch (EUR), APAC (SGD).
+Seed users: `${SEED_ADMIN_EMAIL:-sarah@leadops.io}` (admin), `james@leadops.io`, `mike@leadops.io`. The default password is `password123456`, or set `SEED_ADMIN_PASSWORD` before running the seed. Workspaces: `${SEED_WORKSPACE_NAME:-LeadOps HQ}` (USD), EU Branch (EUR), APAC (SGD).
 
 ### 4. Run
 
@@ -76,6 +80,7 @@ To deploy with Coolify:
 1. Set the compose-based build pack and let Coolify generate the environment variables:
    - `POSTGRES_PASSWORD`, `SESSION_SECRET`, and `APP_URL` are created automatically via Coolify's magic variables.
    - `APP_URL` defaults to your wildcard-domain URL; set it to your real origin (required for OAuth and email links).
+   - Set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME`, and `SEED_WORKSPACE_NAME` before running `npm run db:seed`.
    - Unset/replace `SMTP_URL`, `MAIL_FROM`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_DEVELOPER_TOKEN` as needed.
 2. Assign a domain to the `app` service. Traffic is proxied to container port 3000.
 3. The `app` container runs migrations automatically on startup (see `scripts/migrate.mjs`), then starts the server. Seed demo data separately on demand.
