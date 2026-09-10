@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Opportunity, OpportunityStage, Platform } from "@/lib/types";
+import type { Opportunity, OpportunityStage, Platform, TeamMember } from "@/lib/types";
 
 const stages: { status: OpportunityStage; label: string; color: string; bgColor: string; borderColor: string; ringColor: string }[] = [
   { status: "prospecting", label: "Prospecting", color: "bg-blue-500", bgColor: "bg-blue-50", borderColor: "border-blue-200", ringColor: "ring-blue-200" },
@@ -55,11 +55,11 @@ export default function PipelinePage() {
 
   useEffect(() => {
     let cancelled = false;
-    clientApi<{ members: { user: { id: string; name: string } }[] }>("/api/team")
+    clientApi<TeamMember[]>("/api/team")
       .then((data) => {
         if (cancelled) return;
         const map: Record<string, string> = {};
-        data.members.forEach((m) => { map[m.user.id] = m.user.name; });
+        data.forEach((m) => { map[m.id] = m.name; });
         setOwnerMap(map);
       })
       .catch(() => {});
