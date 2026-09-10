@@ -39,6 +39,7 @@ Fill in `.env`:
 | `DATABASE_URL` | Yes | Postgres connection string, e.g. `postgres://user:pass@localhost:5432/leadops` |
 | `APP_URL` | Yes | Public origin of the app, e.g. `http://localhost:3000` |
 | `SESSION_SECRET` | Recommended | Random string; used for token hashing |
+| `INTEGRATION_ENCRYPTION_KEY` | Yes for integrations | Random long string used to encrypt ad-platform credentials at rest |
 | `ALLOW_SIGNUP` | No | Set `true` to enable public sign-up (default `false`) |
 | `SEED_ADMIN_EMAIL` | For seed | Admin email created/updated by `npm run db:seed` |
 | `SEED_ADMIN_PASSWORD` | For seed | Admin password for `npm run db:seed` (minimum 12 characters) |
@@ -54,7 +55,7 @@ npm run db:migrate
 npm run db:seed
 ```
 
-Seed users: `${SEED_ADMIN_EMAIL:-sarah@leadops.io}` (admin), `james@leadops.io`, `mike@leadops.io`. The default password is `password123456`, or set `SEED_ADMIN_PASSWORD` before running the seed. Workspaces: `${SEED_WORKSPACE_NAME:-LeadOps HQ}` (USD), EU Branch (EUR), APAC (SGD).
+Seed users: `${SEED_ADMIN_EMAIL:-sarah@leadops.io}` (admin), `james@leadops.io`, `mike@leadops.io`. Set `SEED_ADMIN_PASSWORD` before running the seed; it must be at least 12 characters. In production, the seed script refuses to run with demo admin identity. Workspaces: `${SEED_WORKSPACE_NAME:-LeadOps HQ}` (USD), EU Branch (EUR), APAC (SGD).
 
 ### 4. Run
 
@@ -80,6 +81,7 @@ To deploy with Coolify:
 1. Set the compose-based build pack and let Coolify generate the environment variables:
    - `POSTGRES_PASSWORD`, `SESSION_SECRET`, and `APP_URL` are created automatically via Coolify's magic variables.
    - `APP_URL` defaults to your wildcard-domain URL; set it to your real origin (required for OAuth and email links).
+   - Keep `INTEGRATION_ENCRYPTION_KEY` stable. Changing it prevents decrypting stored platform credentials.
    - Set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME`, and `SEED_WORKSPACE_NAME` before running `npm run db:seed`.
    - Unset/replace `SMTP_URL`, `MAIL_FROM`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_DEVELOPER_TOKEN` as needed.
 2. Assign a domain to the `app` service. Traffic is proxied to container port 3000.
