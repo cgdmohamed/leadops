@@ -141,6 +141,10 @@ export function Sidebar({ user, workspaces }: SidebarProps) {
             await clientApi('/api/workspaces', { method: 'POST', body: JSON.stringify({ name: ws.name, currency: ws.currency, timezone: ws.timezone || 'UTC' }) });
             router.refresh();
           }}
+          onDelete={async (id) => {
+            await clientApi('/api/workspaces', { method: 'DELETE', body: JSON.stringify({ workspaceId: id }) });
+            window.location.reload();
+          }}
           collapsed={collapsed}
         />
       </div>
