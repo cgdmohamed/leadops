@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRecords, type ApiRecord } from "@/lib/use-records";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -93,13 +94,6 @@ const goalTypeColors: Record<GoalType, string> = {
 
 const teamMembers = ["Sarah Chen", "James Rivera", "Mike Johnson"];
 
-const initialGoals: Goal[] = [
-  { id: "1", name: "Monthly Revenue", type: "revenue", target: 150000, current: 98500, period: "Sep 2026", icon: goalTypeIcons.revenue, color: goalTypeColors.revenue },
-  { id: "2", name: "New Leads", type: "leads", target: 200, current: 142, period: "Sep 2026", icon: goalTypeIcons.leads, color: goalTypeColors.leads },
-  { id: "3", name: "Closed Deals", type: "deals", target: 30, current: 18, period: "Sep 2026", icon: goalTypeIcons.deals, color: goalTypeColors.deals },
-  { id: "4", name: "Outbound Calls", type: "calls", target: 500, current: 387, period: "Sep 2026", icon: goalTypeIcons.calls, color: goalTypeColors.calls },
-];
-
 const weeklyProgress = [
   { week: "W1", revenue: 22000, leads: 32, deals: 4 },
   { week: "W2", revenue: 28000, leads: 38, deals: 5 },
@@ -112,6 +106,36 @@ const teamGoals = [
   { name: "James Rivera", revenue: 32000, target: 40000, deals: 5, targetDeals: 8 },
   { name: "Mike Johnson", revenue: 21500, target: 30000, deals: 5, targetDeals: 6 },
 ];
+
+function monthEndDate(period: string): string {
+  const parsed = new Date(`${period} 1`);
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().split("T")[0];
+  return new Date(parsed.getFullYear(), parsed.getMonth() + 1, 0).toISOString().split("T")[0];
+}
+
+function formatPeriod(date: string): string {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+function toGoal(record: ApiRecord<Record<string, unknown>>): Goal {
+  const d = record.data;
+  const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
+  const num = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
+  const type = str(d.metric, "revenue") as GoalType;
+  return {
+    id: record.id,
+    name: str(d.name, goalTypeLabels[type] ?? "Goal"),
+    type,
+    target: num(d.target),
+    current: num(d.current),
+    period: formatPeriod(str(d.dueDate, record.createdAt)),
+    icon: goalTypeIcons[type] ?? goalTypeIcons.revenue,
+    color: goalTypeColors[type] ?? goalTypeColors.revenue,
+    assignedTo: str(d.assignedTo) || undefined,
+  };
+}
 
 function isCurrencyType(type: GoalType): boolean {
   return type === "revenue" || type === "collected_revenue" || type === "cac";
@@ -134,7 +158,8 @@ function formatGoalTarget(type: GoalType, value: number): string {
 }
 
 export default function GoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
+  const { items: goalRecords, create } = useRecords<Record<string, unknown>>("goals");
+  const goals = useMemo(() => goalRecords.map((record) => toGoal(record)), [goalRecords]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [chartMetric, setChartMetric] = useState<"revenue" | "leads" | "deals">("revenue");
 
@@ -145,22 +170,17 @@ export default function GoalsPage() {
     assignedTo: "",
   });
 
-  const handleCreateGoal = () => {
+  const handleCreateGoal = async () => {
     if (!newGoal.target || Number(newGoal.target) <= 0) return;
 
-    const goal: Goal = {
-      id: Date.now().toString(),
+    await create({
       name: goalTypeLabels[newGoal.type],
-      type: newGoal.type,
+      metric: newGoal.type,
       target: Number(newGoal.target),
       current: 0,
-      period: newGoal.period,
-      icon: goalTypeIcons[newGoal.type],
-      color: goalTypeColors[newGoal.type],
+      dueDate: monthEndDate(newGoal.period),
       assignedTo: newGoal.assignedTo || undefined,
-    };
-
-    setGoals((prev) => [...prev, goal]);
+    });
     setNewGoal({ type: "revenue", target: "", period: "Sep 2026", assignedTo: "" });
     setDialogOpen(false);
   };
