@@ -52,6 +52,8 @@ Fill in `.env`:
 | `TIKTOK_CLIENT_ID`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_AUTH_URL` | For TikTok sync | TikTok Marketing API OAuth app credentials |
 | `SNAPCHAT_CLIENT_ID`, `SNAPCHAT_CLIENT_SECRET`, `SNAPCHAT_OAUTH_SCOPES` | For Snapchat sync | Snapchat Marketing API OAuth app credentials |
 
+Default Meta scopes are `ads_read,business_management`. Add lead-form permissions only after Meta app review approves them.
+
 ### 3. Create the schema and seed an admin
 
 ```bash

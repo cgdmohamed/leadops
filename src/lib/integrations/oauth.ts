@@ -51,7 +51,7 @@ export function getPlatformAuthUrl(platform: Platform, state: string) {
       client_id: env('META_CLIENT_ID'),
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: process.env.META_OAUTH_SCOPES ?? 'ads_read,leads_retrieval,business_management',
+      scope: process.env.META_OAUTH_SCOPES ?? 'ads_read,business_management',
       state,
     })}`;
   }
