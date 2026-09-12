@@ -3,6 +3,22 @@ import { normalizeStatus } from './types';
 
 const META_API = 'https://graph.facebook.com';
 
+function metaError(data: unknown, fallback: string) {
+  if (!data || typeof data !== 'object') return fallback;
+  const error = (data as Record<string, unknown>).error as Record<string, unknown> | undefined;
+  if (!error) return fallback;
+  const message = typeof error.message === 'string' ? error.message : fallback;
+  const code = error.code ? ` code ${String(error.code)}` : '';
+  const subcode = error.error_subcode ? ` subcode ${String(error.error_subcode)}` : '';
+  return `${message}${code}${subcode}`;
+}
+
+async function readMetaError(response: Response) {
+  let detail: unknown = null;
+  try { detail = await response.json(); } catch {}
+  return metaError(detail, response.statusText);
+}
+
 type MetaField = { name: string; values?: string[] };
 type MetaInsight = { spend?: string; impressions?: string; clicks?: string; inline_link_clicks?: string };
 type MetaCampaignRecord = {
@@ -29,7 +45,7 @@ export class MetaClient implements PlatformClient {
     if (!token || !adAccountId) return [];
     const url = `${META_API}/v19.0/act_${adAccountId.replace(/^act_/, '')}/campaigns?fields=name,status,start_time,stop_time,adsets{name,insights{spend,impressions,clicks,inline_link_clicks}}&limit=100`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error('Meta API request failed');
+    if (!response.ok) throw new Error(`Meta API request failed: ${await readMetaError(response)}`);
     const data = await response.json();
     const campaigns = (data.data ?? []) as MetaCampaignRecord[];
     return campaigns.map((c) => {
@@ -54,11 +70,12 @@ export class MetaClient implements PlatformClient {
   }
 
   async fetchLeads(credentials: Record<string, unknown>, since?: Date): Promise<PlatformLeads[]> {
+    if (process.env.META_SYNC_LEADS !== 'true') return [];
     const token = credentials.accessToken as string;
     if (!token) return [];
     const url = `${META_API}/v19.0/me/leadgen_forms?fields=id,name,leads{id,field_data,created_time}&limit=100`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new Error('Meta API request failed');
+    if (!response.ok) throw new Error(`Meta Lead Ads request failed: ${await readMetaError(response)}`);
     const data = await response.json();
     const forms = (data.data ?? []) as Array<{ id?: string; leads?: { data?: MetaLeadRecord[] } }>;
     const leads: PlatformLeads[] = [];

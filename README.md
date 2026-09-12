@@ -48,11 +48,11 @@ Fill in `.env`:
 | `SEED_WORKSPACE_CURRENCY`, `SEED_WORKSPACE_TIMEZONE` | For seed | Optional workspace defaults |
 | `SMTP_URL`, `MAIL_FROM` | For mail | SMTP connection string and sender address (password reset / invites) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_DEVELOPER_TOKEN` | For Google sync | Google Ads OAuth credentials |
-| `META_CLIENT_ID`, `META_CLIENT_SECRET`, `META_OAUTH_SCOPES` | For Meta sync | Meta OAuth app credentials |
+| `META_CLIENT_ID`, `META_CLIENT_SECRET`, `META_OAUTH_SCOPES`, `META_SYNC_LEADS` | For Meta sync | Meta OAuth app credentials |
 | `TIKTOK_CLIENT_ID`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_AUTH_URL` | For TikTok sync | TikTok Marketing API OAuth app credentials |
 | `SNAPCHAT_CLIENT_ID`, `SNAPCHAT_CLIENT_SECRET`, `SNAPCHAT_OAUTH_SCOPES` | For Snapchat sync | Snapchat Marketing API OAuth app credentials |
 
-Default Meta scopes are `ads_read,business_management`. Add lead-form permissions only after Meta app review approves them.
+Default Meta scopes are `ads_read,business_management`. Keep `META_SYNC_LEADS=false` until Meta approves Lead Ads permissions.
 
 ### 3. Create the schema and seed an admin
 
