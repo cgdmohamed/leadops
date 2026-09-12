@@ -4,7 +4,7 @@ import { getClient } from '@/lib/integrations';
 import { decryptJson, encryptJson, isEncryptedJson } from '@/lib/server/secret-json';
 
 export async function syncPlatform(workspaceId: string, platform: string): Promise<{ campaigns: number; leads: number }> {
-  const connection = await db().query('SELECT * FROM platform_connections WHERE workspace_id=$1 AND platform=$2 AND status=$3', [workspaceId, platform, 'connected']);
+  const connection = await db().query('SELECT * FROM platform_connections WHERE workspace_id=$1 AND platform=$2 AND status<>$3', [workspaceId, platform, 'disconnected']);
   if (!connection.rowCount) throw new Error(`${platform} is not connected`);
   const client = getClient(platform);
   if (!client) throw new Error(`No client for ${platform}`);
@@ -61,13 +61,16 @@ export async function syncPlatform(workspaceId: string, platform: string): Promi
     return { campaigns: campaigns.length, leads: leads.length };
   } catch (error) {
     await db().query("UPDATE sync_runs SET status='failed',finished_at=now(),error=$2 WHERE id=$1", [runId, (error as Error).message]);
-    await db().query("UPDATE platform_connections SET status='error',last_error=$2,updated_at=now() WHERE workspace_id=$1 AND platform=$3", [workspaceId, (error as Error).message, platform]);
+    await db().query("UPDATE platform_connections SET status='connected',last_error=$2,updated_at=now() WHERE workspace_id=$1 AND platform=$3", [workspaceId, (error as Error).message, platform]);
     throw error;
   }
 }
 
 export async function getConnections(workspaceId: string) {
-  const { rows } = await db().query('SELECT platform,display_name,status,account_id,last_sync,last_error FROM platform_connections WHERE workspace_id=$1 ORDER BY platform', [workspaceId]);
+  const { rows } = await db().query(`SELECT platform,display_name,
+    CASE WHEN status='disconnected' THEN 'disconnected' ELSE 'connected' END AS status,
+    account_id,last_sync,last_error
+    FROM platform_connections WHERE workspace_id=$1 ORDER BY platform`, [workspaceId]);
   return rows;
 }
 

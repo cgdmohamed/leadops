@@ -87,6 +87,7 @@ export default function DataSyncPage() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const connectedCount = connections.filter((connection) => connection.status === "connected").length;
+  const erroredCount = connections.filter((connection) => connection.status === "connected" && connection.last_error).length;
   const syncRunsToday = history.filter((entry) => entry.started_at.startsWith(new Date().toISOString().split("T")[0])).length;
   const failedRuns = history.filter((entry) => entry.status === "failed").length;
 
@@ -224,11 +225,11 @@ export default function DataSyncPage() {
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Sync Health</p>
             <p className="text-2xl font-bold">
-              {connections.length > 0 ? Math.round((connections.filter((c) => c.status !== "error").length / connections.length) * 100) : 0}%
+              {connections.length > 0 ? Math.round(((connections.length - erroredCount) / connections.length) * 100) : 0}%
             </p>
-            <p className={`text-xs ${connections.some((c) => c.status === "error") ? "text-amber-600" : "text-muted-foreground"}`}>
-              {connections.some((c) => c.status === "error") ? <AlertTriangle className="inline h-3 w-3 mr-1" /> : <CheckCircle className="inline h-3 w-3 mr-1" />}
-              {connections.some((c) => c.status === "error") ? `${connections.filter((c) => c.status === "error").length} platform(s) in error` : "All platforms healthy"}
+            <p className={`text-xs ${erroredCount > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+              {erroredCount > 0 ? <AlertTriangle className="inline h-3 w-3 mr-1" /> : <CheckCircle className="inline h-3 w-3 mr-1" />}
+              {erroredCount > 0 ? `${erroredCount} platform(s) with sync errors` : "All platforms healthy"}
             </p>
           </CardContent>
         </Card>
@@ -245,7 +246,7 @@ export default function DataSyncPage() {
               const connection = connections.find((c) => c.platform === platform);
               const status = connection?.status ?? "disconnected";
               const running = connection && history.some((h) => h.platform === platform && h.status === "running");
-              const effectiveStatus = running ? "syncing" : status === "connected" ? "synced" : status === "error" ? "failed" : "pending";
+              const effectiveStatus = running ? "syncing" : status === "connected" && connection?.last_error ? "failed" : status === "connected" ? "synced" : "pending";
               const config = statusConfig[effectiveStatus];
               return (
                 <div key={platform} className="rounded-lg border p-4 space-y-3">
@@ -262,7 +263,7 @@ export default function DataSyncPage() {
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <div>
                       <span className="text-muted-foreground/70">Status: </span>
-                      <span className="text-foreground">{connection ? connection.status : "Not connected"}</span>
+                      <span className="text-foreground">{connection ? (connection.last_error ? "Connected, sync failed" : connection.status) : "Not connected"}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground/70">Account ID: </span>
@@ -428,13 +429,18 @@ export default function DataSyncPage() {
             const connection = connections.find((c) => c.platform === configurePlatform);
             return (
             <div className="space-y-4">
-              {connection?.status === "connected" ? (
+              {connection && connection.status !== "disconnected" ? (
                 <>
                   <p className="text-sm text-muted-foreground">
                     This platform is connected. Sync will reconcile campaigns and leads against your ad account.
                   </p>
                   <div className="rounded-lg border p-3 text-sm space-y-1">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Status</span><Badge className="bg-emerald-50 text-emerald-700 text-[10px]">Connected</Badge></div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <Badge className={connection.last_error ? "bg-red-50 text-red-700 text-[10px]" : "bg-emerald-50 text-emerald-700 text-[10px]"}>
+                        {connection.last_error ? "Sync failed" : "Connected"}
+                      </Badge>
+                    </div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Account ID</span><span className="font-medium font-mono text-xs">{connection.account_id ?? "—"}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Last Sync</span><span className="font-medium">{connection.last_sync ? formatTime(connection.last_sync) : "—"}</span></div>
                   </div>
