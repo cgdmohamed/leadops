@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { api, body, admin } from '@/lib/server/api';
+import { api, body, admin, ApiError } from '@/lib/server/api';
 import { db } from '@/lib/server/db';
 import { syncPlatform, getConnections, getSyncHistory } from '@/lib/integrations/service';
 import { encryptJson } from '@/lib/server/secret-json';
@@ -30,7 +30,12 @@ export async function POST(request: Request) {
     }
 
     // No credentials provided => trigger a sync for the existing connection
-    const result = await syncPlatform(user.activeWorkspace, platform);
+    let result: Awaited<ReturnType<typeof syncPlatform>>;
+    try {
+      result = await syncPlatform(user.activeWorkspace, platform);
+    } catch (error) {
+      throw new ApiError(502, (error as Error).message);
+    }
     return { success: true, ...result };
   });
 }
